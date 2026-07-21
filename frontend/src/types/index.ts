@@ -8,11 +8,13 @@ export interface User {
   createdAt: string;
 }
 
+export type ProjectPermissionLevel = 'READ' | 'WRITE';
+
 export interface ProjectPermission {
   id: string;
   userId: string;
   projectId: string;
-  permission: 'READ' | 'WRITE';
+  permission: ProjectPermissionLevel;
   user?: User;
 }
 
