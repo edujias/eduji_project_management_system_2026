@@ -35,6 +35,13 @@ export function CreateProjectModal({ onClose, onSuccess }: CreateProjectModalPro
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
@@ -91,6 +98,7 @@ export function CreateProjectModal({ onClose, onSuccess }: CreateProjectModalPro
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="Projenin amacı ve kapsamı..."
               rows={3}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 resize-none"

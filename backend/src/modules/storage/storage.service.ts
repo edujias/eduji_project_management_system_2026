@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/database/prisma.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class StorageService {
@@ -16,7 +18,8 @@ export class StorageService {
 
   async generateUploadUrl(dto: { fileName: string; projectId: string }, userId: string) {
     const s3Key = `projects/${dto.projectId}/${Date.now()}_${dto.fileName}`;
-    const uploadUrl = `https://storage.enterprise.local/${this.bucketName}/${s3Key}?mock_presigned=true`;
+    const port = this.configService.get<number>('PORT') || 4001;
+    const uploadUrl = `http://localhost:${port}/api/storage/mock-upload?s3Key=${s3Key}`;
 
     return {
       uploadUrl,
@@ -31,6 +34,8 @@ export class StorageService {
     });
     if (!project) throw new NotFoundException('Proje bulunamadı.');
 
+    const port = this.configService.get<number>('PORT') || 4001;
+
     return this.prisma.fileAsset.create({
       data: {
         projectId: data.projectId,
@@ -40,7 +45,7 @@ export class StorageService {
         fileSize: data.fileSize,
         mimeType: data.mimeType,
         s3Key: data.s3Key,
-        publicUrl: `https://storage.enterprise.local/${this.bucketName}/${data.s3Key}`,
+        publicUrl: `http://localhost:${port}/api/storage/file/${data.s3Key}`,
       },
     });
   }
@@ -55,5 +60,27 @@ export class StorageService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async deleteFileAsset(fileId: string) {
+    const fileAsset = await this.prisma.fileAsset.findUnique({
+      where: { id: fileId },
+    });
+    if (!fileAsset) throw new NotFoundException('Dosya bulunamadı.');
+
+    await this.prisma.fileAsset.delete({
+      where: { id: fileId },
+    });
+
+    const filePath = path.join(process.cwd(), 'uploads', fileAsset.s3Key);
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error('Dosya diskten silinirken hata:', err);
+      }
+    }
+
+    return { success: true };
   }
 }
