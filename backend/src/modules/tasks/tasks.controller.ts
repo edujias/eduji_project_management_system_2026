@@ -39,6 +39,14 @@ export class TasksController {
     return this.tasksService.updateTaskStatus(taskId, body.status, body.assignedToId);
   }
 
+  @Patch(':taskId')
+  async updateTask(
+    @Param('taskId') taskId: string,
+    @Body() body: any,
+  ) {
+    return this.tasksService.updateTask(taskId, body);
+  }
+
   @Delete(':taskId')
   async deleteTask(@Param('taskId') taskId: string) {
     return this.tasksService.deleteTask(taskId);

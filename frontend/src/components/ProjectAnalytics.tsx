@@ -86,8 +86,9 @@ export function ProjectAnalytics({ project }: ProjectAnalyticsProps) {
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               Ekip Üyeleri
             </span>
-            <div className="text-2xl font-extrabold text-purple-400 mt-1">
-              {project.permissions?.length || 3} Üye
+            <div className="text-xs font-medium text-purple-400 mt-1 space-y-0.5">
+              <div>Yönetici (Admin): 1</div>
+              <div>Çalışan (Employee): {project.permissions?.length || 0}</div>
             </div>
           </div>
           <div className="w-12 h-12 bg-purple-500/10 text-purple-400 rounded-xl flex items-center justify-center border border-purple-500/20">

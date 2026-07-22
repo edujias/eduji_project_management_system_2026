@@ -14,6 +14,7 @@ import { ProjectAnalytics } from '@/components/ProjectAnalytics';
 import { GanttView } from '@/components/GanttView';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
+import { PersonalNotes } from '@/components/PersonalNotes';
 import {
   Hash,
   MessageSquare,
@@ -33,18 +34,31 @@ import {
   Globe,
   Palette,
   Terminal,
+  FileText,
+  Settings,
 } from 'lucide-react';
+
+const simpleHash = (str: string) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return hash.toString(16);
+};
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Auth State
-  const [email, setEmail] = useState('admin@company.com');
-  const [password, setPassword] = useState('admin123');
-  const [fullName, setFullName] = useState('Ahmet Yılmaz');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'admin'>('login');
+  const [devOfflineUsers, setDevOfflineUsers] = useState<{email: string, fullName: string, role: string}[]>([]);
 
   // App Data
   const [projects, setProjects] = useState<Project[]>([]);
@@ -53,8 +67,8 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageInput, setMessageInput] = useState('');
 
-  // Active Tab State: 'chat' | 'kanban' | 'files' | 'analytics' | 'gantt'
-  const [activeTab, setActiveTab] = useState<'chat' | 'kanban' | 'files' | 'analytics' | 'gantt'>('chat');
+  // Active Tab State: 'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes'
+  const [activeTab, setActiveTab] = useState<'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes'>('chat');
 
   // Active channel ref for Socket listener closure fix
   const activeChannelRef = useRef<Channel | null>(null);
@@ -69,11 +83,42 @@ export default function Home() {
   // Language & Theme State
   const [lang, setLang] = useState<'TR' | 'EN'>('TR');
 
+  const [kanbanRefreshKey, setKanbanRefreshKey] = useState(0);
+
   // Socket
   const { socket, isConnected, joinChannel, leaveChannel } = useSocket(token);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Populate default offline users list in localStorage if not already present or needs clean names
+    const existing = localStorage.getItem('offline_users');
+    let loadedUsers = [];
+    if (!existing || existing.includes('(Offline)')) {
+      const defaultUsers = [
+        {
+          id: 'mock-admin-id',
+          email: 'admin@company.com',
+          fullName: 'Ahmet Yılmaz',
+          role: 'ADMIN',
+          passwordHash: simpleHash('admin123'),
+          plainPassword: 'admin123',
+        },
+        {
+          id: 'mock-emp-zeyn-id',
+          email: 'zeyn@company.com',
+          fullName: 'Zeynep Yılmaz',
+          role: 'EMPLOYEE',
+          passwordHash: simpleHash('employee123'),
+          plainPassword: 'employee123',
+        }
+      ];
+      localStorage.setItem('offline_users', JSON.stringify(defaultUsers));
+      loadedUsers = defaultUsers;
+    } else {
+      loadedUsers = JSON.parse(existing);
+    }
+    setDevOfflineUsers(loadedUsers);
+
     const savedToken = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
     if (savedToken && savedUser) {
@@ -180,7 +225,7 @@ export default function Home() {
       const defaultProj: Project = {
         id: 'mock-proj-id',
         name: 'Şirket İçi Proje',
-        code: 'OFFLINE',
+        code: 'INT',
         description: 'Simülasyon Modu (Canlı bağlantı için lütfen Docker\'ı açın).',
         channels: [
           { id: '1', name: 'genel', projectId: 'mock-proj-id' },
@@ -218,9 +263,11 @@ export default function Home() {
     e.preventDefault();
     setAuthError(null);
 
+    const isRegister = authMode === 'register';
+
     try {
-      const endpoint = isRegisterMode ? '/auth/register' : '/auth/login';
-      const body = isRegisterMode
+      const endpoint = isRegister ? '/auth/register' : '/auth/login';
+      const body = isRegister
         ? { email, password, fullName }
         : { email, password };
 
@@ -234,27 +281,98 @@ export default function Home() {
       localStorage.setItem('token', res.accessToken);
       localStorage.setItem('user', JSON.stringify(res.user));
     } catch (err: any) {
+      if (err && !err.isNetworkError) {
+        setAuthError(err.message || 'Giriş/Kayıt hatası oluştu.');
+        return;
+      }
+      
       console.warn('Backend connection failed. Authenticating with mock user account:', err);
-      // Fallback: Login automatically with a local mock profile so the user can use the app offline!
+      
       const isPortalAdmin = authMode === 'admin';
-      const mockUser: User = {
-        id: `mock-user-${Math.random()}`,
-        email: email.trim() || (isPortalAdmin ? 'admin@company.com' : 'employee@company.com'),
-        fullName: fullName?.trim() || (isPortalAdmin ? 'Ahmet Yılmaz (Offline)' : 'Zeynep Yılmaz (Offline)'),
-        role: isPortalAdmin ? 'ADMIN' : 'EMPLOYEE',
-      };
-      const mockToken = 'mock-access-token';
-
-      setToken(mockToken);
-      setCurrentUser(mockUser);
-      localStorage.setItem('token', mockToken);
-      localStorage.setItem('user', JSON.stringify(mockUser));
+      
+      // Load offline users from localStorage
+      const offlineUsersRaw = localStorage.getItem('offline_users');
+      let offlineUsers = offlineUsersRaw ? JSON.parse(offlineUsersRaw) : [];
+      
+      if (isRegister) {
+        // Registering a new employee offline
+        const existingUser = offlineUsers.find((u: any) => u.email.toLowerCase() === email.trim().toLowerCase());
+        if (existingUser) {
+          setAuthError('Bu e-posta adresiyle kayıtlı kullanıcı zaten var.');
+          return;
+        }
+        
+        const newUser = {
+          id: `offline-user-${Math.random()}`,
+          email: email.trim(),
+          fullName: fullName.trim() || 'Yeni Çalışan',
+          role: 'EMPLOYEE',
+          passwordHash: simpleHash(password),
+          plainPassword: password,
+        };
+        
+        offlineUsers.push(newUser);
+        localStorage.setItem('offline_users', JSON.stringify(offlineUsers));
+        setDevOfflineUsers(offlineUsers);
+        
+        const userSession: User = {
+          id: newUser.id,
+          email: newUser.email,
+          fullName: newUser.fullName,
+          role: 'EMPLOYEE',
+        };
+        
+        const mockToken = 'mock-access-token';
+        setToken(mockToken);
+        setCurrentUser(userSession);
+        localStorage.setItem('token', mockToken);
+        localStorage.setItem('user', JSON.stringify(userSession));
+      } else {
+        // Logging in offline
+        const targetUser = offlineUsers.find((u: any) => u.email.toLowerCase() === email.trim().toLowerCase());
+        if (!targetUser) {
+          setAuthError('E-posta adresi veya şifre hatalı (Çevrimdışı mod).');
+          return;
+        }
+        
+        // Validate password hash
+        if (targetUser.passwordHash !== simpleHash(password)) {
+          setAuthError('E-posta adresi veya şifre hatalı (Şifre uyuşmuyor).');
+          return;
+        }
+        
+        // Validate role access
+        if (isPortalAdmin && targetUser.role !== 'ADMIN') {
+          setAuthError('Bu hesap ile Yönetici Girişi yapılamaz.');
+          return;
+        }
+        if (!isPortalAdmin && targetUser.role === 'ADMIN') {
+          setAuthError('Yöneticiler Çalışan Girişi kullanamaz, lütfen Yönetici Girişi sekmesini kullanın.');
+          return;
+        }
+        
+        const userSession: User = {
+          id: targetUser.id,
+          email: targetUser.email,
+          fullName: targetUser.fullName,
+          role: targetUser.role as any,
+        };
+        
+        const mockToken = 'mock-access-token';
+        setToken(mockToken);
+        setCurrentUser(userSession);
+        localStorage.setItem('token', mockToken);
+        localStorage.setItem('user', JSON.stringify(userSession));
+      }
     }
   };
 
   const handleLogout = () => {
     setToken(null);
     setCurrentUser(null);
+    setEmail('');
+    setPassword('');
+    setFullName('');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   };
@@ -538,13 +656,46 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                   Çalışan Girişi
                 </button>
               </div>
-              <div className="p-3 bg-indigo-950/20 border border-indigo-950/40 rounded-xl text-center w-full">
-                <p className="text-[10px] text-indigo-300/80 leading-normal">
-                  Yönetici hesapları sistem kurulumunda atanır. Yeni yönetici kaydı yapılamaz.
-                </p>
-              </div>
             </div>
           )}
+
+          {/* Developer Mode Helper */}
+          <div className="mt-8 pt-4 border-t border-slate-800/60 text-left">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-2">
+              <Terminal className="w-3.5 h-3.5" />
+              <span>Geliştirici Modu: Kayıtlı Hesaplar</span>
+            </div>
+            <p className="text-[10px] text-slate-500 mb-2 leading-relaxed">
+              Tıklayarak e-posta ve şifre alanlarını otomatik doldurabilirsiniz:
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {devOfflineUsers.length > 0 ? (
+                devOfflineUsers.map((u) => (
+                  <button
+                    key={u.email}
+                    type="button"
+                    onClick={() => {
+                      setEmail(u.email);
+                      setPassword((u as any).plainPassword || (u.role === 'ADMIN' ? 'admin123' : 'employee123'));
+                      if (u.role === 'ADMIN') {
+                        setAuthMode('admin');
+                      } else {
+                        setAuthMode('login');
+                      }
+                    }}
+                    className="text-[10px] bg-slate-950 hover:bg-slate-800 hover:text-white text-slate-300 px-2 py-1.5 rounded-lg border border-slate-800 transition font-medium flex flex-col items-start min-w-[120px] cursor-pointer"
+                    title="Otomatik Doldur"
+                  >
+                    <span className="font-semibold text-slate-200 truncate max-w-[110px]">{u.fullName}</span>
+                    <span className="text-[9px] text-slate-400 font-mono truncate max-w-[110px]">{u.email}</span>
+                    <span className="text-[8px] mt-0.5 text-indigo-400 font-extrabold uppercase tracking-wider">{u.role}</span>
+                  </button>
+                ))
+              ) : (
+                <span className="text-[10px] text-slate-600">Kayıtlı hesap bulunamadı.</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -576,6 +727,20 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
             <LogOut className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Settings Button */}
+        {activeProject && (
+          <div className="p-3 pb-0">
+            <button
+              onClick={() => setShowAdminAclModal(true)}
+              className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2.5 transition bg-indigo-600 text-white border border-indigo-500 shadow-sm cursor-pointer hover:bg-indigo-800 hover:border-indigo-600"
+              title="Ayarlar"
+            >
+              <Settings className="w-5 h-5 text-indigo-200" />
+              <span>Ayarlar</span>
+            </button>
+          </div>
+        )}
 
         {/* Project Selector & Actions */}
         <div className="p-3 border-b border-slate-800/60">
@@ -682,6 +847,17 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           >
             <BarChart3 className="w-4 h-4 text-indigo-400" /> Proje Analitiği
           </button>
+
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
+              activeTab === 'notes'
+                ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4 text-indigo-400" /> Notlarım & Yapılacaklar
+          </button>
         </div>
 
         {/* Channels List under Active Project (Only shown when on Chat tab) */}
@@ -742,7 +918,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
       {/* 2. MAIN VIEW: SWITCHED BASED ON TAB */}
       <main className="flex-1 flex flex-col min-w-0 bg-slate-950">
         {/* Top Header */}
-        <header className="h-14 border-b border-slate-800 px-6 flex items-center justify-between bg-slate-900/60 backdrop-blur">
+        <header className="h-14 border-b border-slate-800 px-6 flex items-center justify-between bg-slate-900/60 backdrop-blur relative z-30">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="p-2 bg-slate-800 rounded-lg text-indigo-400 border border-slate-700">
               {activeTab === 'chat' && <Hash className="w-5 h-5" />}
@@ -750,6 +926,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
               {activeTab === 'gantt' && <Calendar className="w-5 h-5" />}
               {activeTab === 'files' && <HardDrive className="w-5 h-5" />}
               {activeTab === 'analytics' && <BarChart3 className="w-5 h-5" />}
+              {activeTab === 'notes' && <FileText className="w-5 h-5" />}
             </div>
             <div className="min-w-0">
               <h3 className="font-bold text-white text-sm flex items-baseline gap-2">
@@ -758,6 +935,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 {activeTab === 'gantt' && 'Gantt Zaman Çizelgesi'}
                 {activeTab === 'files' && 'Dosya Deposu'}
                 {activeTab === 'analytics' && 'Proje Analitiği'}
+                {activeTab === 'notes' && 'Notlarım & Yapılacaklar'}
                 {activeTab === 'chat' && activeProject && (
                   <span className="text-sm font-bold text-slate-400">
                     {lang === 'TR' ? ' - ' : ' in '}<span className="text-slate-200">{activeProject.name}</span>
@@ -793,16 +971,6 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-purple-500/20 transition flex items-center gap-1.5"
               >
                 <Sparkles className="w-4 h-4 animate-pulse" /> Gemini AI Yol Haritası
-              </button>
-            )}
-
-            {/* Admin ACL Permission Button */}
-            {currentUser.role === 'ADMIN' && activeProject && (
-              <button
-                onClick={() => setShowAdminAclModal(true)}
-                className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs rounded-lg font-medium transition flex items-center gap-1.5"
-              >
-                <ShieldCheck className="w-4 h-4 text-indigo-400" /> Çalışan Yetkileri
               </button>
             )}
           </div>
@@ -1003,6 +1171,11 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
               }
             }
           />
+        )}
+
+        {/* TAB 6: PERSONAL PRIVATE NOTES & TO-DO */}
+        {activeTab === 'notes' && currentUser && (
+          <PersonalNotes currentUser={currentUser} />
         )}
       </main>
 

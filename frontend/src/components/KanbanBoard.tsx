@@ -12,6 +12,7 @@ import {
   Flame,
   Trash2,
   UserCheck,
+  Pencil,
 } from 'lucide-react';
 
 interface KanbanBoardProps {
@@ -22,6 +23,15 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingAi, setGeneratingAi] = useState(false);
+  const [draggedOverColId, setDraggedOverColId] = useState<string | null>(null);
+
+  // Edit task form state
+  const [showEditTaskModal, setShowEditTaskModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState('');
+  const [editTaskDesc, setEditTaskDesc] = useState('');
+  const [editTaskPriority, setEditTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>('MEDIUM');
+  const [editTaskDueDate, setEditTaskDueDate] = useState('');
 
   // New task form state
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
@@ -60,6 +70,16 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskTitle.trim()) return;
+
+    if (taskDueDate) {
+      const selected = new Date(taskDueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selected < today) {
+        alert('Bitiş tarihi geçmiş bir tarih olamaz!');
+        return;
+      }
+    }
 
     try {
       const newTask = await apiFetch<Task>(`/tasks/project/${project.id}`, {
@@ -102,6 +122,51 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
       setTaskDesc('');
       setTaskDueDate('');
       setShowNewTaskModal(false);
+    }
+  };
+
+  const handleUpdateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTask || !editTaskTitle.trim()) return;
+
+    if (editTaskDueDate) {
+      const selected = new Date(editTaskDueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selected < today) {
+        alert('Bitiş tarihi geçmiş bir tarih olamaz!');
+        return;
+      }
+    }
+
+    try {
+      const updated = await apiFetch<Task>(`/tasks/${editingTask.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: editTaskTitle,
+          description: editTaskDesc,
+          priority: editTaskPriority,
+          dueDate: editTaskDueDate || null,
+        }),
+      });
+
+      const updatedList = tasks.map((t) => (t.id === editingTask.id ? updated : t));
+      setTasks(updatedList);
+      saveTasksLocally(updatedList);
+      setShowEditTaskModal(false);
+    } catch (err: any) {
+      console.warn('Backend çevrimdışı, görev yerel olarak güncelleniyor:', err);
+      const updatedList = tasks.map((t) => (t.id === editingTask.id ? {
+        ...t,
+        title: editTaskTitle.trim(),
+        description: editTaskDesc.trim(),
+        priority: editTaskPriority,
+        dueDate: editTaskDueDate ? new Date(editTaskDueDate).toISOString() : null,
+      } : t));
+      
+      setTasks(updatedList);
+      saveTasksLocally(updatedList);
+      setShowEditTaskModal(false);
     }
   };
 
@@ -246,7 +311,19 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
           return (
             <div
               key={col.id}
-              className={`rounded-2xl border p-4 flex flex-col ${col.bg} backdrop-blur min-h-0`}
+              onDragOver={(e) => e.preventDefault()}
+              onDragEnter={() => setDraggedOverColId(col.id)}
+              onDragLeave={() => setDraggedOverColId(null)}
+              onDrop={(e) => {
+                const taskId = e.dataTransfer.getData('text/plain');
+                if (taskId) {
+                  handleMoveStatus(taskId, col.id);
+                }
+                setDraggedOverColId(null);
+              }}
+              className={`rounded-2xl border p-4 flex flex-col ${col.bg} backdrop-blur min-h-0 transition-all duration-200 ${
+                draggedOverColId === col.id ? 'ring-2 ring-indigo-500/40 bg-indigo-950/20 scale-[1.01]' : ''
+              }`}
             >
               {/* Column Header */}
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800/60">
@@ -263,19 +340,40 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
                 {colTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-4 rounded-xl shadow-md transition group space-y-2.5"
+                    draggable="true"
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', task.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-4 rounded-xl shadow-md transition group space-y-2.5 cursor-grab active:cursor-grabbing hover:shadow-lg hover:shadow-slate-950/50"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h4 className="font-semibold text-xs text-slate-100 leading-snug">
                         {task.title}
                       </h4>
-                      <button
-                        onClick={() => handleDeleteTask(task.id)}
-                        className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
-                        title="Sil"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
+                        <button
+                          onClick={() => {
+                            setEditingTask(task);
+                            setEditTaskTitle(task.title);
+                            setEditTaskDesc(task.description || '');
+                            setEditTaskPriority(task.priority);
+                            setEditTaskDueDate(task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-CA') : '');
+                            setShowEditTaskModal(true);
+                          }}
+                          className="text-slate-500 hover:text-indigo-400 transition cursor-pointer"
+                          title="Düzenle"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="text-slate-500 hover:text-red-400 transition cursor-pointer"
+                          title="Sil"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {task.description && (
@@ -374,6 +472,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
                   type="date"
                   value={taskDueDate}
                   onChange={(e) => setTaskDueDate(e.target.value)}
+                  min={new Date().toLocaleDateString('en-CA')}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -407,6 +506,87 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-indigo-600/20"
                 >
                   Görev Oluştur
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* EDIT TASK MODAL */}
+      {showEditTaskModal && editingTask && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-white">Görevi Düzenle</h3>
+
+            <form onSubmit={handleUpdateTask} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Görev Başlığı
+                </label>
+                <input
+                  type="text"
+                  value={editTaskTitle}
+                  onChange={(e) => setEditTaskTitle(e.target.value)}
+                  placeholder="Örn: S3 Presigned URL Testi"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Açıklama (Opsiyonel)
+                </label>
+                <textarea
+                  value={editTaskDesc}
+                  onChange={(e) => setEditTaskDesc(e.target.value)}
+                  placeholder="Görev detayları ve kabul kriterleri..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 h-24"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Bitiş Tarihi (Due Date)
+                </label>
+                <input
+                  type="date"
+                  value={editTaskDueDate}
+                  onChange={(e) => setEditTaskDueDate(e.target.value)}
+                  min={new Date().toLocaleDateString('en-CA')}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Öncelik Derecesi
+                </label>
+                <select
+                  value={editTaskPriority}
+                  onChange={(e: any) => setEditTaskPriority(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="LOW">Düşük</option>
+                  <option value="MEDIUM">Orta</option>
+                  <option value="HIGH">Yüksek</option>
+                  <option value="URGENT">Acil ⚡</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditTaskModal(false)}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-medium rounded-lg hover:bg-slate-700"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-indigo-600/20"
+                >
+                  Değişiklikleri Kaydet
                 </button>
               </div>
             </form>

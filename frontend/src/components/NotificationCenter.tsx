@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Bell, Check, Sparkles, FolderKanban, ShieldCheck, MessageSquare, X } from 'lucide-react';
+import { Bell, Check, Sparkles, FolderKanban, ShieldCheck, MessageSquare } from 'lucide-react';
 
 export interface NotificationItem {
   id: string;

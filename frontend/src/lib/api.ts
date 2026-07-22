@@ -16,15 +16,24 @@ export async function apiFetch<T>(
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    const networkError = new Error('Sunucuya bağlanılamadı.');
+    (networkError as any).isNetworkError = true;
+    throw networkError;
+  }
 
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.message || 'Bir hata oluştu.');
+    const apiError = new Error(data.message || 'Bir hata oluştu.');
+    (apiError as any).statusCode = response.status;
+    throw apiError;
   }
 
   return data as T;

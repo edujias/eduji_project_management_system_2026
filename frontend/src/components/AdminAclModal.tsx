@@ -25,6 +25,7 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const project = projects.find(p => p.id === selectedProjectId) || currentProject;
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   // Edit states for project settings
   const [editName, setEditName] = useState(project.name);
@@ -327,17 +328,19 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
                     <Users className="w-4 h-4 text-zinc-600 stroke-[1.8]" />
                     <span>Çalışan Listesi</span>
                   </button>
-                  <button
-                    onClick={() => setActiveTab('settings')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
-                      activeTab === 'settings'
-                        ? 'bg-white text-zinc-900 border border-white/60 shadow-sm'
-                        : 'text-zinc-700 hover:bg-white/45'
-                    }`}
-                  >
-                    <Settings className="w-4 h-4 text-zinc-600 stroke-[1.8]" />
-                    <span>Proje Ayarları</span>
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setActiveTab('settings')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
+                        activeTab === 'settings'
+                          ? 'bg-white text-zinc-900 border border-white/60 shadow-sm'
+                          : 'text-zinc-700 hover:bg-white/45'
+                      }`}
+                    >
+                      <Settings className="w-4 h-4 text-zinc-600 stroke-[1.8]" />
+                      <span>Proje Ayarları</span>
+                    </button>
+                  )}
                 </nav>
               </div>
 
@@ -366,7 +369,7 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
           {/* Footer branding */}
           <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 font-semibold px-2">
             <ShieldCheck className="w-3.5 h-3.5 text-zinc-600" />
-            <span>Eduji Admin Panel</span>
+            <span>{isAdmin ? 'Eduji Admin Panel' : 'Eduji Proje Paneli'}</span>
           </div>
         </aside>
 
@@ -383,71 +386,79 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
             <div className="flex flex-col flex-1 min-h-0 space-y-6">
               <div>
                 <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
-                  Yönetim / Çalışan Listesi
+                  {isAdmin ? 'Yönetim / Çalışan Listesi' : 'Proje Yetki Listesi'}
                 </div>
-                <h2 className="text-2xl font-bold text-zinc-900 mt-1 mb-1.5">Çalışan Yetkileri</h2>
+                <h2 className="text-2xl font-bold text-zinc-900 mt-1 mb-1.5">
+                  {isAdmin ? 'Çalışan Yetkileri' : 'Proje Ekibi & Yetkiler'}
+                </h2>
                 <p className="text-xs text-zinc-500">
-                  Proje seçerek o projenin çalışma alanına erişebilecek çalışanları ve yetki derecelerini yönetin.
+                  {isAdmin 
+                    ? 'Proje seçerek o projenin çalışma alanına erişebilecek çalışanları ve yetki derecelerini yönetin.'
+                    : 'Bu projede görevli tüm ekip üyelerini ve erişim yetkilerini görüntüleyin.'}
                 </p>
               </div>
 
               {/* Project Selection Dropdown */}
-              <div className="flex flex-col gap-1.5 bg-zinc-50 p-4 rounded-xl border border-zinc-200">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                  Yönetilecek Projeyi Seçin
-                </label>
-                <select
-                  value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  className="bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 max-w-sm transition cursor-pointer font-semibold"
-                >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Minimalist Inline Invite Form */}
-              <form onSubmit={handleAssignPermission} className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 space-y-3">
-                <span className="block text-[11px] font-bold text-zinc-600 uppercase tracking-wider">
-                  Yeni Çalışan Ekle
-                </span>
-                <div className="flex flex-col sm:flex-row gap-2">
+              {isAdmin && (
+                <div className="flex flex-col gap-1.5 bg-zinc-50 p-4 rounded-xl border border-zinc-200">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    Yönetilecek Projeyi Seçin
+                  </label>
                   <select
-                    value={selectedUserId}
-                    onChange={(e) => setSelectedUserId(e.target.value)}
-                    className="flex-1 bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500"
-                    required
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    className="bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 max-w-sm transition cursor-pointer font-semibold"
                   >
-                    <option value="">Çalışan Seçin...</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.fullName} ({u.email})
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.code})
                       </option>
                     ))}
                   </select>
-
-                  <select
-                    value={selectedPermission}
-                    onChange={(e) => setSelectedPermission(e.target.value as ProjectPermissionLevel)}
-                    className="bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:w-48"
-                  >
-                    <option value="READ">Sadece Oku (READ)</option>
-                    <option value="WRITE">Yazabilir/Düzenleyebilir (WRITE)</option>
-                  </select>
-
-                  <button
-                    type="submit"
-                    disabled={loading || !selectedUserId}
-                    className="bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white font-semibold text-xs px-4 py-1.5 rounded transition shadow-sm flex items-center justify-center gap-1"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    Ekle
-                  </button>
                 </div>
-              </form>
+              )}
+
+              {/* Minimalist Inline Invite Form */}
+              {isAdmin && (
+                <form onSubmit={handleAssignPermission} className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 space-y-3">
+                  <span className="block text-[11px] font-bold text-zinc-600 uppercase tracking-wider">
+                    Yeni Çalışan Ekle
+                  </span>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <select
+                      value={selectedUserId}
+                      onChange={(e) => setSelectedUserId(e.target.value)}
+                      className="flex-1 bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500"
+                      required
+                    >
+                      <option value="">Çalışan Seçin...</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.fullName} ({u.email})
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={selectedPermission}
+                      onChange={(e) => setSelectedPermission(e.target.value as ProjectPermissionLevel)}
+                      className="bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:w-48"
+                    >
+                      <option value="READ">Sadece Oku (READ)</option>
+                      <option value="WRITE">Yazabilir/Düzenleyebilir (WRITE)</option>
+                    </select>
+
+                    <button
+                      type="submit"
+                      disabled={loading || !selectedUserId}
+                      className="bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white font-semibold text-xs px-4 py-1.5 rounded transition shadow-sm flex items-center justify-center gap-1"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      Ekle
+                    </button>
+                  </div>
+                </form>
+              )}
 
               {/* Members List Table */}
               <div className="flex-1 overflow-hidden flex flex-col">
@@ -459,7 +470,7 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
                     <div className="bg-zinc-50 flex items-center justify-between px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
                       <div className="w-1/2">Çalışan</div>
                       <div className="w-1/3">Yetki Seviyesi</div>
-                      <div className="w-20 text-right">İşlem</div>
+                      {isAdmin && <div className="w-20 text-right">İşlem</div>}
                     </div>
 
                     <div className="divide-y divide-zinc-100 bg-white">
@@ -483,27 +494,39 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
 
                             {/* Inline Access dropdown */}
                             <div className="w-1/3">
-                              <select
-                                value={perm.permission}
-                                onChange={(e) => handleUpdatePermission(perm.userId, e.target.value as ProjectPermissionLevel)}
-                                className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 rounded px-2.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition cursor-pointer font-medium"
-                              >
-                                <option value="READ">Sadece Oku</option>
-                                <option value="WRITE">Düzenleyebilir</option>
-                              </select>
+                              {isAdmin ? (
+                                <select
+                                  value={perm.permission}
+                                  onChange={(e) => handleUpdatePermission(perm.userId, e.target.value as ProjectPermissionLevel)}
+                                  className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 rounded px-2.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition cursor-pointer font-medium"
+                                >
+                                  <option value="READ">Sadece Oku</option>
+                                  <option value="WRITE">Düzenleyebilir</option>
+                                </select>
+                              ) : (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                  perm.permission === 'WRITE' 
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                    : 'bg-zinc-50 text-zinc-600 border border-zinc-200'
+                                }`}>
+                                  {perm.permission === 'WRITE' ? 'Düzenleyebilir' : 'Sadece Oku'}
+                                </span>
+                              )}
                             </div>
 
                             {/* Actions */}
-                            <div className="w-20 text-right">
-                              <button
-                                onClick={() => handleRemovePermission(perm.userId)}
-                                className="inline-flex items-center gap-1 text-[11px] text-red-500 hover:text-red-700 font-semibold px-2 py-1 rounded hover:bg-red-50 transition"
-                                title="Yetkiyi Kaldır"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Kaldır
-                              </button>
-                            </div>
+                            {isAdmin && (
+                              <div className="w-20 text-right">
+                                <button
+                                  onClick={() => handleRemovePermission(perm.userId)}
+                                  className="inline-flex items-center gap-1 text-[11px] text-red-500 hover:text-red-700 font-semibold px-2 py-1 rounded hover:bg-red-50 transition"
+                                  title="Yetkiyi Kaldır"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Kaldır
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))
                       ) : (
