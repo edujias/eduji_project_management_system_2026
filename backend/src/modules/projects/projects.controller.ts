@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Delete,
+  Patch,
   Param,
   Body,
   UseGuards,
@@ -40,6 +41,15 @@ export class ProjectsController {
   @RequireProjectPermission(ProjectPermissionLevel.READ)
   async getProjectById(@Param('projectId') projectId: string) {
     return this.projectsService.getProjectById(projectId);
+  }
+
+  @Patch(':projectId')
+  @Roles(SystemRole.ADMIN)
+  async updateProject(
+    @Param('projectId') projectId: string,
+    @Body() dto: { name: string; description?: string },
+  ) {
+    return this.projectsService.updateProject(projectId, dto);
   }
 
   @Post(':projectId/permissions')

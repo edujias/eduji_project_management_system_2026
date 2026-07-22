@@ -136,7 +136,7 @@ export function ProjectAnalytics({ project }: ProjectAnalyticsProps) {
         </div>
 
         {/* AI Insight Box */}
-        <div className="bg-gradient-to-br from-purple-950/40 to-slate-900 border border-purple-800/40 p-6 rounded-2xl space-y-3">
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-3">
           <h3 className="font-bold text-sm text-purple-300 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-purple-400" /> Gemini AI Risk & Performans Değerlendirmesi
           </h3>

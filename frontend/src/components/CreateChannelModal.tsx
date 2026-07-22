@@ -2,16 +2,17 @@
 
 import React, { useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { X, FolderPlus } from 'lucide-react';
+import { X, Hash } from 'lucide-react';
+import { Project } from '@/types';
 
-interface CreateProjectModalProps {
+interface CreateChannelModalProps {
+  project: Project;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function CreateProjectModal({ onClose, onSuccess }: CreateProjectModalProps) {
+export function CreateChannelModal({ project, onClose, onSuccess }: CreateChannelModalProps) {
   const [name, setName] = useState('');
-  const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,33 +23,48 @@ export function CreateProjectModal({ onClose, onSuccess }: CreateProjectModalPro
     setError(null);
 
     const finalDescription = currentDesc !== undefined ? currentDesc : description;
+    const formattedName = name.trim().toLowerCase().replace(/\s+/g, '-');
 
     try {
-      await apiFetch('/projects', {
-        method: 'POST',
-        body: JSON.stringify({ name, code, description: finalDescription }),
-      });
+      if (project.id && !project.id.startsWith('offline-') && project.id !== 'mock-proj-id') {
+        await apiFetch('/channels', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: formattedName,
+            description: finalDescription,
+            projectId: project.id,
+          }),
+        });
+      } else {
+        throw new Error('Offline mode active.');
+      }
       onSuccess();
       onClose();
     } catch (err: any) {
-      console.warn('Backend offline, saving project locally:', err);
-      // Fallback: Save project to localStorage so it works immediately even when offline
-      const mockProject = {
-        id: `offline-${Math.random()}`,
-        name: name.trim(),
-        code: code.trim().toUpperCase(),
-        description: finalDescription.trim() || 'Yerel simülasyon projesi.',
-        channels: [
-          { id: `chan-1-${Math.random()}`, name: 'genel', projectId: '' },
-          { id: `chan-2-${Math.random()}`, name: 'rastgele', projectId: '' },
-          { id: `chan-3-${Math.random()}`, name: 'yazilim-ekibi', projectId: '' }
-        ],
+      console.warn('Saving channel locally:', err);
+      
+      // Fallback: Save channel locally inside the localStorage projects list
+      const newChannel = {
+        id: `offline-chan-${Math.random()}`,
+        name: formattedName,
+        projectId: project.id,
+        description: finalDescription,
       };
 
       const existingRaw = localStorage.getItem('offline_projects');
-      const existing: any[] = existingRaw ? JSON.parse(existingRaw) : [];
-      existing.push(mockProject);
-      localStorage.setItem('offline_projects', JSON.stringify(existing));
+      if (existingRaw) {
+        let existing: Project[] = JSON.parse(existingRaw);
+        existing = existing.map(p => {
+          if (p.id === project.id) {
+            return {
+              ...p,
+              channels: [...(p.channels || []), newChannel],
+            };
+          }
+          return p;
+        });
+        localStorage.setItem('offline_projects', JSON.stringify(existing));
+      }
 
       onSuccess();
       onClose();
@@ -76,11 +92,13 @@ export function CreateProjectModal({ onClose, onSuccess }: CreateProjectModalPro
 
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2.5 bg-indigo-600/20 text-indigo-400 rounded-lg border border-indigo-500/30">
-            <FolderPlus className="w-6 h-6" />
+            <Hash className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Yeni Proje Oluştur</h2>
-            <p className="text-xs text-slate-400">Şirket içi takip için yeni bir proje açın.</p>
+            <h2 className="text-xl font-bold text-white">Yeni Kanal Oluştur</h2>
+            <p className="text-xs text-slate-400">
+              {project.name} projesi için yeni bir mesajlaşma kanalı açın.
+            </p>
           </div>
         </div>
 
@@ -92,27 +110,18 @@ export function CreateProjectModal({ onClose, onSuccess }: CreateProjectModalPro
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Proje Adı</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Örn: E-Ticaret Mobil Uygulaması"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Proje Kodu / Tag</label>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="Örn: PRJ-MOBIL"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
-              required
-            />
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Kanal Adı</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-semibold">#</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                placeholder="yazilim-ekibi"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                required
+              />
+            </div>
           </div>
 
           <div>
@@ -121,7 +130,7 @@ export function CreateProjectModal({ onClose, onSuccess }: CreateProjectModalPro
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Projenin amacı ve kapsamı..."
+              placeholder="Bu kanalın amacı ve konusu..."
               rows={3}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 resize-none"
             />
@@ -140,7 +149,7 @@ export function CreateProjectModal({ onClose, onSuccess }: CreateProjectModalPro
               disabled={loading}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium text-sm rounded-lg transition"
             >
-              {loading ? 'Oluşturuluyor...' : 'Proje Oluştur'}
+              {loading ? 'Oluşturuluyor...' : 'Kanal Oluştur'}
             </button>
           </div>
         </form>

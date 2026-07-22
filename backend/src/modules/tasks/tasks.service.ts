@@ -28,6 +28,7 @@ export class TasksService {
         description: data.description,
         status: data.status || 'TODO',
         priority: data.priority || 'MEDIUM',
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
         assignedToId: data.assignedToId || null,
         createdById: creatorId,
       },

@@ -139,4 +139,19 @@ export class ProjectsService {
       },
     });
   }
+
+  async updateProject(projectId: string, dto: { name: string; description?: string }) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) throw new NotFoundException('Proje bulunamadı.');
+
+    return this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        name: dto.name,
+        description: dto.description,
+      },
+    });
+  }
 }
