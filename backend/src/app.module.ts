@@ -9,6 +9,7 @@ import { MessagesModule } from './modules/messages/messages.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { AiModule } from './modules/ai/ai.module';
 import { TasksModule } from './modules/tasks/tasks.module';
+import { EvaluationsModule } from './modules/evaluations/evaluations.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { TasksModule } from './modules/tasks/tasks.module';
     StorageModule,
     AiModule,
     TasksModule,
+    EvaluationsModule,
   ],
 })
 export class AppModule {}
