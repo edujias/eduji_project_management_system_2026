@@ -364,6 +364,37 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
     }
   };
 
+  const handleDeleteProject = async (projectId: string, projectName: string) => {
+    const confirmed = window.confirm(`"${projectName}" projesini ve buna bağlı TÜM kanalları, dosyaları ve görevleri tamamen silmek istediğinizden emin misiniz?\nBu işlem geri alınamaz!`);
+    if (!confirmed) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      if (projectId && !projectId.startsWith('offline-') && projectId !== 'mock-proj-id') {
+        await apiFetch(`/projects/${projectId}`, {
+          method: 'DELETE',
+        });
+      } else {
+        // Local Storage offline fallback
+        const existingProjectsRaw = localStorage.getItem('offline_projects');
+        if (existingProjectsRaw) {
+          const existing = JSON.parse(existingProjectsRaw);
+          const filtered = existing.filter((p: any) => p.id !== projectId);
+          localStorage.setItem('offline_projects', JSON.stringify(filtered));
+        }
+      }
+      alert('Proje başarıyla silindi!');
+      onRefresh();
+      onClose();
+    } catch (err: any) {
+      console.error('Proje silinirken hata oluştu:', err);
+      setError(err.message || 'Proje silinemedi.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4">
       {/* Notion-style Modal container: Flat White, 2 columns */}
@@ -518,51 +549,57 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
 
               {/* Minimalist Inline Invite Form */}
               {isAdmin && (
-                <form onSubmit={handleAssignPermission} className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 space-y-3">
-                  <span className="block text-[11px] font-bold text-zinc-600 uppercase tracking-wider">
+                <form onSubmit={handleAssignPermission} className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 space-y-3 max-w-xl">
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
                     Yeni Çalışan Ekle
-                  </span>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <select
-                      value={selectedUserId}
-                      onChange={(e) => setSelectedUserId(e.target.value)}
-                      className="flex-1 bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500"
-                      required
-                    >
-                      <option value="">Çalışan Seçin...</option>
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.fullName} ({u.email})
-                        </option>
-                      ))}
-                    </select>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-6">
+                      <select
+                        value={selectedUserId}
+                        onChange={(e) => setSelectedUserId(e.target.value)}
+                        className="w-full bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 font-semibold cursor-pointer"
+                        required
+                      >
+                        <option value="">Çalışan Seçin...</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.fullName} ({u.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                    <select
-                      value={selectedPermission}
-                      onChange={(e) => setSelectedPermission(e.target.value as ProjectPermissionLevel)}
-                      className="bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:w-48"
-                    >
-                      <option value="READ">Sadece Oku (READ)</option>
-                      <option value="WRITE">Yazabilir/Düzenleyebilir (WRITE)</option>
-                    </select>
+                    <div className="sm:col-span-4">
+                      <select
+                        value={selectedPermission}
+                        onChange={(e) => setSelectedPermission(e.target.value as ProjectPermissionLevel)}
+                        className="w-full bg-white border border-zinc-200 text-zinc-800 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 font-semibold cursor-pointer"
+                      >
+                        <option value="READ">Sadece Oku (READ)</option>
+                        <option value="WRITE">Yazabilir/Düzenleyebilir (WRITE)</option>
+                      </select>
+                    </div>
 
-                    <button
-                      type="submit"
-                      disabled={loading || !selectedUserId}
-                      className="bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white font-semibold text-xs px-4 py-1.5 rounded transition shadow-sm flex items-center justify-center gap-1"
-                    >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      Ekle
-                    </button>
+                    <div className="sm:col-span-2">
+                      <button
+                        type="submit"
+                        disabled={loading || !selectedUserId}
+                        className="w-full bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white font-semibold text-xs py-1.5 rounded transition shadow-sm flex items-center justify-center gap-1 h-full min-h-[32px] cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        Ekle
+                      </button>
+                    </div>
                   </div>
                 </form>
               )}
 
               {/* Members List Table */}
               <div className="flex-1 overflow-hidden flex flex-col">
-                <span className="block text-[11px] font-bold text-zinc-600 uppercase tracking-wider mb-2.5">
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
                   Proje Çalışanları ({project.permissions?.length || 0})
-                </span>
+                </label>
                 <div className="border border-zinc-200 rounded-xl overflow-hidden flex-1 overflow-y-auto bg-white">
                   <div className="min-w-full divide-y divide-zinc-200">
                     <div className="bg-zinc-50 flex items-center justify-between px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
@@ -716,6 +753,57 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
                   </button>
                 </div>
               </form>
+
+              {/* Sadece Adminler İçin Proje Listesi ve Silme Alanı */}
+              {isAdmin && (
+                <div className="pt-6 border-t border-zinc-200 mt-6 max-w-xl">
+                  <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                        Proje Listesi
+                      </label>
+                      <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">
+                        Sistemdeki tüm projeler aşağıda listelenmiştir. Bir projeyi silmek; projeye ait tüm kanalları, görevleri, dosyaları ve üye yetkilerini <strong>kalıcı olarak</strong> silecektir.
+                      </p>
+                    </div>
+
+                    <div className="border border-zinc-200 rounded-xl overflow-hidden bg-white">
+                      <div className="bg-zinc-100 border-b border-zinc-200 flex items-center justify-between px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-zinc-500 select-none">
+                        <div className="w-2/3">Proje Adı ve Kodu</div>
+                        <div className="w-1/3 text-right">İşlem</div>
+                      </div>
+
+                      <div className="divide-y divide-zinc-100 bg-white max-h-[150px] overflow-y-auto">
+                        {projects && projects.length > 0 ? (
+                          projects.map((proj) => (
+                            <div
+                              key={proj.id}
+                              className="flex items-center justify-between px-3 py-2 hover:bg-red-50/20 transition text-xs"
+                            >
+                              <div className="min-w-0">
+                                <span className="font-bold text-zinc-800 truncate block text-[11px]">{proj.name}</span>
+                                <span className="text-[9px] font-mono text-zinc-500">{proj.code}</span>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteProject(proj.id, proj.name)}
+                                className="px-2 py-0.5 text-[9px] bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded border border-red-200 hover:border-red-600 font-bold transition flex items-center gap-1 cursor-pointer"
+                                title="Projeyi Tamamen Sil"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                Sil
+                              </button>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="py-4 text-center text-zinc-500 text-xs">
+                            Listelenecek proje bulunamadı.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

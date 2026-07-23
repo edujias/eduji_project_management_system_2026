@@ -69,4 +69,10 @@ export class ProjectsController {
   ) {
     return this.projectsService.removePermission(projectId, userId);
   }
+
+  @Delete(':projectId')
+  @Roles(SystemRole.ADMIN)
+  async deleteProject(@Param('projectId') projectId: string) {
+    return this.projectsService.deleteProject(projectId);
+  }
 }

@@ -154,4 +154,15 @@ export class ProjectsService {
       },
     });
   }
+
+  async deleteProject(projectId: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) throw new NotFoundException('Proje bulunamadı.');
+
+    return this.prisma.project.delete({
+      where: { id: projectId },
+    });
+  }
 }

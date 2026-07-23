@@ -13,7 +13,6 @@ import { FileExplorer } from '@/components/FileExplorer';
 import { ProjectAnalytics } from '@/components/ProjectAnalytics';
 import { GanttView } from '@/components/GanttView';
 import { NotificationCenter } from '@/components/NotificationCenter';
-import { VoiceRecorder } from '@/components/VoiceRecorder';
 import { PersonalNotes } from '@/components/PersonalNotes';
 import { UserActivityPanel } from '@/components/UserActivityPanel';
 import {
@@ -1099,11 +1098,6 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
             {/* Message Input Bar */}
             <footer className="p-4 border-t border-slate-800 bg-slate-900/40">
               <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-                {/* Voice Recorder Button */}
-                <VoiceRecorder
-                  onSendVoiceNote={(transcript) => setMessageInput(transcript)}
-                />
-
                 <div className="relative flex-1">
                   <input
                     type="text"
