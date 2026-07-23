@@ -71,6 +71,11 @@ export class MessagesService {
       where: { email: 'gemini@company.com' },
     });
 
+    if (aiUser && aiUser.status !== 'ACTIVE') {
+      console.log('🤖 [Gemini AI] Gemini pasif durumda olduğu için otomatik yanıt tetiklenmedi.');
+      return;
+    }
+
     if (!aiUser) {
       aiUser = await this.prisma.user.create({
         data: {

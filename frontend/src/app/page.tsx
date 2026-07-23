@@ -1130,10 +1130,15 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                                 {member.fullName.charAt(0)}
                               </div>
                               <span className={`absolute -bottom-0.5 -right-0.5 flex h-2 w-2 rounded-full border border-slate-900 ${
-                                member.isOnline ? 'bg-emerald-500' : 'bg-slate-500'
+                                member.status !== 'ACTIVE' ? 'bg-red-500 shadow-sm shadow-red-500/20' : member.isOnline ? 'bg-emerald-500' : 'bg-slate-500'
                               }`} />
                             </div>
-                            <span className="truncate">{member.fullName} {isSelf && '(Siz)'}</span>
+                            <span className="truncate">
+                              {member.fullName} {isSelf && '(Siz)'}
+                              {member.status !== 'ACTIVE' && (
+                                <span className="text-[10px] text-red-500 font-bold ml-1.5 font-mono">(Pasif)</span>
+                              )}
+                            </span>
                           </div>
                           
                           <span className="text-[8px] font-semibold text-slate-500 uppercase tracking-wider scale-90">

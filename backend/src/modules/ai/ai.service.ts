@@ -15,6 +15,10 @@ export class AiService {
 
   // CANLI GOOGLE GEMINI AI API ÇAĞRISI
   async generateChatReply(channelId: string, userMessage: string, senderName: string): Promise<string> {
+    if (!this.geminiApiKey) {
+      return `⚠️ **Sistem Uyarısı**: Gerçek Google Gemini AI Asistanı ile iletişim kurulamadı. \`backend/.env\` dosyasında \`GEMINI_API_KEY\` tanımlanmamış. Lütfen geçerli bir Gemini API anahtarı ekleyin.`;
+    }
+
     const recentMessages = await this.prisma.message.findMany({
       where: { channelId },
       take: 6,
@@ -40,85 +44,42 @@ ${senderName}: "${userMessage}"
 Lütfen tamamen CANLI ve ÖZGÜN bir yanıt ver. Kullanıcıya yardımcı ol, samimi, profesyonel ve teknik olarak güçlü bir Türkçe yanıt ver. Yanıtında Markdown biçimlendirmeleri (kalın metin, kod blokları, maddeler) kullanabilirsin.
 `;
 
-    if (this.geminiApiKey) {
-      // Google Gemini v1beta geçerli model isimleri
-      const models = [
-        'gemini-1.5-flash-latest',
-        'gemini-1.5-pro-latest',
-        'gemini-2.0-flash-exp',
-        'gemini-1.5-flash',
-      ];
+    // Google Gemini v1beta geçerli model isimleri
+    const models = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-flash-latest',
+      'gemini-pro-latest',
+      'gemini-1.5-flash',
+    ];
 
-      for (const model of models) {
-        try {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: promptText }] }],
-              }),
-            },
-          );
+    for (const model of models) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: promptText }] }],
+            }),
+          },
+        );
 
-          const data = await response.json();
+        const data = await response.json();
 
-          if (response.ok && data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-            console.log(`✅ [Google Gemini API Success] Model: ${model}`);
-            return data.candidates[0].content.parts[0].text;
-          } else if (data?.error) {
-            console.warn(`[Google Gemini API] ${model} Hata (${data.error.code}): ${data.error.message}`);
-          }
-        } catch (err: any) {
-          console.error(`[Google Gemini Bağlantı Hatası] ${model}:`, err);
+        if (response.ok && data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          console.log(`✅ [Google Gemini API Success] Model: ${model}`);
+          return data.candidates[0].content.parts[0].text;
+        } else if (data?.error) {
+          console.warn(`[Google Gemini API] ${model} Hata (${data.error.code}): ${data.error.message}`);
         }
+      } catch (err: any) {
+        console.error(`[Google Gemini Bağlantı Hatası] ${model}:`, err);
       }
     }
 
-    return this.generateDynamicFallbackReply(userMessage, senderName);
-  }
-
-  private generateDynamicFallbackReply(userMessage: string, senderName: string): string {
-    const text = userMessage.trim();
-    const lower = text.toLowerCase();
-
-    if (lower.includes('selam') || lower.includes('merhaba') || lower.includes('hey')) {
-      return `Merhaba **${senderName}**! 👋 Projenize atanmış **🤖 Gemini AI Asistanınızım**. Bugün ne üzerinde çalışıyoruz? Size mimari, kodlama veya görev organizasyonunda nasıl yardımcı olabilirim?`;
-    }
-
-    if (lower.includes('kod') || lower.includes('yaz') || lower.includes('ornek') || lower.includes('örnek') || lower.includes('function') || lower.includes('component')) {
-      return `Harika bir teknik soru **${senderName}**! 💻 
-
-İşte projeniz için hazırladığım örnek kod yapısı:
-
-\`\`\`typescript
-// Gemini AI - Proje Bileşeni & Servis Katmanı
-export interface TaskItem {
-  id: string;
-  title: string;
-  completed: boolean;
-}
-
-export class ProjectTaskService {
-  private tasks: TaskItem[] = [];
-
-  addTask(title: string): TaskItem {
-    const newTask: TaskItem = {
-      id: Math.random().toString(36).substring(7),
-      title,
-      completed: false,
-    };
-    this.tasks.push(newTask);
-    return newTask;
-  }
-}
-\`\`\`
-
-Bu kod parçacığını uygulamanıza entegre edebiliriz. Başka neleri özelleştirmemi istersiniz?`;
-    }
-
-    return `Sayın **${senderName}**, "${text}" mesajınızı aldım! 🚀 Projemizin başarısı için bu konu üzerinde çalışabiliriz.`;
+    return `⚠️ **Sistem Uyarısı**: Google Gemini AI API çağrısı başarısız oldu. Lütfen \`backend/.env\` dosyasındaki API anahtarınızın geçerliliğini ve internet bağlantınızı kontrol edin.`;
   }
 
   async generateProjectRoadmap(projectId: string) {
@@ -160,34 +121,45 @@ PROJE BİLGİLERİ:
 Lütfen yanıtı Türkçe ve Markdown formatında ver.
 `;
 
-    if (this.geminiApiKey) {
-      const models = ['gemini-1.5-flash-latest', 'gemini-1.5-pro-latest', 'gemini-2.0-flash-exp'];
-      for (const model of models) {
-        try {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: promptText }] }],
-              }),
-            },
-          );
+    if (!this.geminiApiKey) {
+      return {
+        source: 'Sistem Uyarısı',
+        roadmap: `⚠️ **Sistem Uyarısı**: Canlı yapay zeka analizi yapılamadı. Lütfen \`backend/.env\` dosyasına geçerli bir \`GEMINI_API_KEY\` ekleyin.`,
+      };
+    }
 
-          const data = await response.json();
-          if (response.ok && data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-            return { roadmap: data.candidates[0].content.parts[0].text, source: `Google ${model} Canlı API` };
-          }
-        } catch (err) {
-          console.error(`[Gemini AI Roadmap] ${model} Hata:`, err);
+    const models = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-flash-latest',
+      'gemini-pro-latest',
+      'gemini-1.5-flash',
+    ];
+    for (const model of models) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: promptText }] }],
+            }),
+          },
+        );
+
+        const data = await response.json();
+        if (response.ok && data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          return { roadmap: data.candidates[0].content.parts[0].text, source: `Google ${model} Canlı API` };
         }
+      } catch (err) {
+        console.error(`[Gemini AI Roadmap] ${model} Hata:`, err);
       }
     }
 
     return {
-      source: 'Gemini AI Akıllı Proje Analizcisi',
-      roadmap: `### 🎯 PROJE YOL HARİTASI\n**${project.name}** projesi için canlı yapay zeka analizi hazırlanıyor...`,
+      source: 'Sistem Uyarısı',
+      roadmap: `⚠️ **Sistem Uyarısı**: Google Gemini AI API çağrısı başarısız oldu. Lütfen \`backend/.env\` dosyasındaki API anahtarınızın geçerliliğini kontrol edin.`,
     };
   }
 }

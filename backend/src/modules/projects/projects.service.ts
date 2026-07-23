@@ -72,7 +72,7 @@ export class ProjectsService {
         channels: true,
         permissions: {
           include: {
-            user: { select: { id: true, fullName: true, email: true, role: true, isOnline: true } },
+            user: { select: { id: true, fullName: true, email: true, role: true, isOnline: true, status: true } },
           },
         },
       },
@@ -94,7 +94,7 @@ export class ProjectsService {
         },
         permissions: {
           include: {
-            user: { select: { id: true, fullName: true, email: true, role: true, isOnline: true } },
+            user: { select: { id: true, fullName: true, email: true, role: true, isOnline: true, status: true } },
           },
         },
         fileAssets: true,
