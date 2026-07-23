@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Project, User, ProjectPermissionLevel } from '@/types';
 import { apiFetch } from '@/lib/api';
-import { X, ShieldCheck, UserPlus, Users, Settings, User as UserIcon, Trash2, ArrowUpRight, Activity, RefreshCw, Clock, Calendar } from 'lucide-react';
+import { X, ShieldCheck, UserPlus, Users, Settings, User as UserIcon, Trash2, ArrowUpRight, Activity, RefreshCw, Clock, Calendar, Search } from 'lucide-react';
 
 interface AdminAclModalProps {
   projects: Project[];
@@ -12,12 +12,15 @@ interface AdminAclModalProps {
   onRefresh: () => void;
 }
 
-type TabType = 'members' | 'settings' | 'profile' | 'activity';
+type TabType = 'members' | 'employees' | 'settings' | 'profile' | 'activity';
 
 export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: AdminAclModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('members');
   const [selectedProjectId, setSelectedProjectId] = useState(currentProject.id);
   const [users, setUsers] = useState<User[]>([]);
+  const [allSystemUsers, setAllSystemUsers] = useState<User[]>([]);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedPermission, setSelectedPermission] = useState<ProjectPermissionLevel>('READ');
   const [loading, setLoading] = useState(false);
@@ -76,17 +79,96 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
   const fetchUsers = async () => {
     try {
       const data = await apiFetch<User[]>('/users');
+      setAllSystemUsers(data);
       setUsers(data.filter((u) => u.role !== 'ADMIN')); // Sadece Çalışanları göster
     } catch (err: any) {
       console.warn('Backend offline, loading mock employees:', err);
-      // Fallback: Default mock employees list
+      // Fallback: Check localStorage and default mock employees list
+      const offlineUsersRaw = localStorage.getItem('offline_users');
+      const offlineUsers: User[] = (offlineUsersRaw ? JSON.parse(offlineUsersRaw) : []).map((u: any) => ({
+        ...u,
+        status: u.status || 'ACTIVE',
+        createdAt: u.createdAt || new Date().toISOString()
+      }));
+      
       const mockEmployees: User[] = [
-        { id: 'mock-emp-zeyn', fullName: 'Zeynep Yılmaz', email: 'zeyn@company.com', role: 'EMPLOYEE' },
-        { id: 'mock-emp-can', fullName: 'Can Demir', email: 'can@company.com', role: 'EMPLOYEE' },
-        { id: 'mock-emp-merve', fullName: 'Merve Kaya', email: 'merve@company.com', role: 'EMPLOYEE' },
-        { id: 'mock-emp-ali', fullName: 'Ali Şahin', email: 'ali@company.com', role: 'EMPLOYEE' },
+        { id: 'mock-emp-zeyn', fullName: 'Zeynep Yılmaz', email: 'zeyn@company.com', role: 'EMPLOYEE', status: 'ACTIVE', createdAt: new Date().toISOString() },
+        { id: 'mock-emp-can', fullName: 'Can Demir', email: 'can@company.com', role: 'EMPLOYEE', status: 'ACTIVE', createdAt: new Date().toISOString() },
+        { id: 'mock-emp-merve', fullName: 'Merve Kaya', email: 'merve@company.com', role: 'EMPLOYEE', status: 'ACTIVE', createdAt: new Date().toISOString() },
+        { id: 'mock-emp-ali', fullName: 'Ali Şahin', email: 'ali@company.com', role: 'EMPLOYEE', status: 'ACTIVE', createdAt: new Date().toISOString() },
       ];
-      setUsers(mockEmployees);
+
+      const combined = [...offlineUsers];
+      mockEmployees.forEach(mock => {
+        if (!combined.some(u => u.email.toLowerCase() === mock.email.toLowerCase())) {
+          combined.push(mock);
+        }
+      });
+
+      setAllSystemUsers(combined);
+      setUsers(combined.filter((u) => u.role !== 'ADMIN'));
+    }
+  };
+
+  const handleUpdateUserRole = async (userId: string, newRole: 'ADMIN' | 'EMPLOYEE') => {
+    setActionLoadingId(userId);
+    setError(null);
+    try {
+      await apiFetch(`/users/${userId}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role: newRole }),
+      });
+      await fetchUsers();
+    } catch (err: any) {
+      console.warn('Backend update failed, applying update offline/locally:', err);
+      const offlineUsersRaw = localStorage.getItem('offline_users');
+      let offlineUsers: User[] = (offlineUsersRaw ? JSON.parse(offlineUsersRaw) : []).map((u: any) => ({
+        ...u,
+        status: u.status || 'ACTIVE',
+        createdAt: u.createdAt || new Date().toISOString()
+      }));
+      
+      offlineUsers = offlineUsers.map(u => u.id === userId ? { ...u, role: newRole } : u);
+      localStorage.setItem('offline_users', JSON.stringify(offlineUsers));
+      
+      if (currentUser && currentUser.id === userId) {
+        const updatedCurrentUser = { ...currentUser, role: newRole };
+        setCurrentUser(updatedCurrentUser);
+        localStorage.setItem('user', JSON.stringify(updatedCurrentUser));
+      }
+      
+      setAllSystemUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u).filter(u => u.role !== 'ADMIN'));
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleUpdateUserStatus = async (userId: string, newStatus: 'ACTIVE' | 'INACTIVE') => {
+    setActionLoadingId(userId);
+    setError(null);
+    try {
+      await apiFetch(`/users/${userId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      await fetchUsers();
+    } catch (err: any) {
+      console.warn('Backend update failed, applying update offline/locally:', err);
+      const offlineUsersRaw = localStorage.getItem('offline_users');
+      let offlineUsers: User[] = (offlineUsersRaw ? JSON.parse(offlineUsersRaw) : []).map((u: any) => ({
+        ...u,
+        status: u.status || 'ACTIVE',
+        createdAt: u.createdAt || new Date().toISOString()
+      }));
+      
+      offlineUsers = offlineUsers.map(u => u.id === userId ? { ...u, status: newStatus } : u);
+      localStorage.setItem('offline_users', JSON.stringify(offlineUsers));
+      
+      setAllSystemUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u).filter(u => u.role !== 'ADMIN'));
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -242,7 +324,7 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
           if (p.id === project.id) {
             return {
               ...p,
-              permissions: (p.permissions || []).map(perm => 
+              permissions: (p.permissions || []).map(perm =>
                 perm.userId === userId ? { ...perm, permission: newPermission } : perm
               ),
             };
@@ -261,7 +343,7 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
       }
 
       if (project.permissions) {
-        project.permissions = project.permissions.map(perm => 
+        project.permissions = project.permissions.map(perm =>
           perm.userId === userId ? { ...perm, permission: newPermission } : perm
         ) as any;
       }
@@ -399,7 +481,7 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4">
       {/* Notion-style Modal container: Flat White, 2 columns */}
       <div className="bg-white rounded-xl max-w-4xl w-full h-[600px] flex overflow-hidden shadow-2xl relative border border-zinc-200 text-zinc-800 animate-in fade-in zoom-in-95 duration-200">
-        
+
         {/* Close Button at top-right */}
         <button
           onClick={onClose}
@@ -435,35 +517,42 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
                 <nav className="space-y-0.5">
                   <button
                     onClick={() => setActiveTab('members')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
-                      activeTab === 'members'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${activeTab === 'members'
                         ? 'bg-white text-zinc-900 border border-white/60 shadow-sm'
                         : 'text-zinc-700 hover:bg-white/45'
-                    }`}
+                      }`}
                   >
-                    <Users className="w-4 h-4 text-zinc-600 stroke-[1.8]" />
-                    <span>Çalışan Listesi</span>
+                    <ShieldCheck className="w-4 h-4 text-zinc-600 stroke-[1.8]" />
+                    <span>Çalışan Yetkileri</span>
                   </button>
                   {isAdmin && (
                     <>
                       <button
-                        onClick={() => setActiveTab('settings')}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
-                          activeTab === 'settings'
+                        onClick={() => setActiveTab('employees')}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${activeTab === 'employees'
                             ? 'bg-white text-zinc-900 border border-white/60 shadow-sm'
                             : 'text-zinc-700 hover:bg-white/45'
-                        }`}
+                          }`}
+                      >
+                        <Users className="w-4 h-4 text-zinc-600 stroke-[1.8]" />
+                        <span>Çalışan Listesi</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('settings')}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${activeTab === 'settings'
+                            ? 'bg-white text-zinc-900 border border-white/60 shadow-sm'
+                            : 'text-zinc-700 hover:bg-white/45'
+                          }`}
                       >
                         <Settings className="w-4 h-4 text-zinc-600 stroke-[1.8]" />
                         <span>Proje Ayarları</span>
                       </button>
                       <button
                         onClick={() => setActiveTab('activity')}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
-                          activeTab === 'activity'
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${activeTab === 'activity'
                             ? 'bg-white text-zinc-900 border border-white/60 shadow-sm'
                             : 'text-zinc-700 hover:bg-white/45'
-                        }`}
+                          }`}
                       >
                         <Activity className="w-4 h-4 text-zinc-600 stroke-[1.8]" />
                         <span>Kullanıcı Aktiviteleri</span>
@@ -481,11 +570,10 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
                 <nav className="space-y-0.5">
                   <button
                     onClick={() => setActiveTab('profile')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
-                      activeTab === 'profile'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${activeTab === 'profile'
                         ? 'bg-white text-zinc-900 border border-white/60 shadow-sm'
                         : 'text-zinc-700 hover:bg-white/45'
-                    }`}
+                      }`}
                   >
                     <UserIcon className="w-4 h-4 text-zinc-600 stroke-[1.8]" />
                     <span>Profilim</span>
@@ -521,7 +609,7 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
                   {isAdmin ? 'Çalışan Yetkileri' : 'Proje Ekibi & Yetkiler'}
                 </h2>
                 <p className="text-xs text-zinc-500">
-                  {isAdmin 
+                  {isAdmin
                     ? 'Proje seçerek o projenin çalışma alanına erişebilecek çalışanları ve yetki derecelerini yönetin.'
                     : 'Bu projede görevli tüm ekip üyelerini ve erişim yetkilerini görüntüleyin.'}
                 </p>
@@ -639,11 +727,10 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
                                   <option value="WRITE">Düzenleyebilir</option>
                                 </select>
                               ) : (
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                  perm.permission === 'WRITE' 
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${perm.permission === 'WRITE'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                     : 'bg-zinc-50 text-zinc-600 border border-zinc-200'
-                                }`}>
+                                  }`}>
                                   {perm.permission === 'WRITE' ? 'Düzenleyebilir' : 'Sadece Oku'}
                                 </span>
                               )}
@@ -807,6 +894,133 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
             </div>
           )}
 
+          {/* TAB: EMPLOYEES (ÇALIŞAN LİSTESİ) */}
+          {activeTab === 'employees' && isAdmin && (
+            <div className="space-y-6">
+              <div>
+                <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+                  Yönetim / Çalışan Listesi
+                </div>
+                <h2 className="text-2xl font-bold text-zinc-900 mt-1 mb-1.5">Çalışan Listesi</h2>
+                <p className="text-xs text-zinc-500">
+                  Sistemde kayıtlı olan tüm kullanıcıların rollerini ve hesap durumlarını yönetin.
+                </p>
+              </div>
+
+              <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                      Sistem Çalışanları ({allSystemUsers.length})
+                    </label>
+                  </div>
+                  
+                  {/* Arama Kutusu */}
+                  <div className="relative max-w-xs w-full">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
+                      <Search className="w-3.5 h-3.5 text-zinc-400" />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Çalışan ara..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 bg-white border border-zinc-200 text-zinc-800 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition font-semibold"
+                    />
+                  </div>
+                </div>
+
+                <div className="border border-zinc-200 rounded-xl overflow-hidden bg-white">
+                  <div className="bg-zinc-100 border-b border-zinc-200 flex items-center justify-between px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-zinc-500 select-none">
+                    <div className="w-2/5">Kullanıcı</div>
+                    <div className="w-1/5">Sistem Rolü</div>
+                    <div className="w-1/5">Hesap Durumu</div>
+                    <div className="w-1/5 text-right">Kayıt Tarihi</div>
+                  </div>
+
+                  <div className="divide-y divide-zinc-100 bg-white max-h-[350px] overflow-y-auto">
+                    {allSystemUsers && allSystemUsers.length > 0 ? (
+                      (() => {
+                        const filtered = allSystemUsers.filter(u => 
+                          u.fullName.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
+                          u.email.toLowerCase().includes(userSearchQuery.toLowerCase())
+                        );
+                        
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="py-8 text-center text-zinc-500 text-xs">
+                              Aramanızla eşleşen çalışan bulunamadı.
+                            </div>
+                          );
+                        }
+                        
+                        return filtered.map((u) => (
+                          <div
+                            key={u.id}
+                            className="flex items-center justify-between px-3 py-2.5 hover:bg-zinc-50/50 transition text-xs"
+                          >
+                            {/* Kullanıcı Bilgileri */}
+                            <div className="w-2/5 flex items-center gap-2.5 min-w-0">
+                              <div className="w-7 h-7 rounded-full bg-[#caf5f7] flex items-center justify-center text-xs font-bold text-zinc-900 border border-zinc-200/50 flex-shrink-0">
+                                {u.fullName?.charAt(0) || 'U'}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-zinc-800 truncate block text-[11px]">{u.fullName}</span>
+                                <span className="text-[9px] text-zinc-500 truncate block">{u.email}</span>
+                              </div>
+                            </div>
+                            
+                            {/* Rol Seçimi */}
+                            <div className="w-1/5">
+                              <select
+                                value={u.role}
+                                onChange={(e) => handleUpdateUserRole(u.id, e.target.value as 'ADMIN' | 'EMPLOYEE')}
+                                disabled={actionLoadingId === u.id}
+                                className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition cursor-pointer font-semibold disabled:opacity-50"
+                              >
+                                <option value="EMPLOYEE">Çalışan</option>
+                                <option value="ADMIN">Yönetici (Admin)</option>
+                              </select>
+                            </div>
+                            
+                            {/* Durum Seçimi */}
+                            <div className="w-1/5 flex items-center gap-1.5">
+                              <select
+                                value={u.status || 'ACTIVE'}
+                                onChange={(e) => handleUpdateUserStatus(u.id, e.target.value as 'ACTIVE' | 'INACTIVE')}
+                                disabled={actionLoadingId === u.id}
+                                className={`border rounded px-2 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition cursor-pointer font-semibold disabled:opacity-50 ${
+                                  (u.status || 'ACTIVE') === 'ACTIVE' 
+                                    ? 'bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700' 
+                                    : 'bg-red-50 border-red-200 hover:bg-red-100 text-red-700'
+                                }`}
+                              >
+                                <option value="ACTIVE">Aktif</option>
+                                <option value="INACTIVE">Pasif</option>
+                              </select>
+                              {actionLoadingId === u.id && (
+                                <span className="w-3 h-3 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></span>
+                              )}
+                            </div>
+                            
+                            {/* Kayıt Tarihi */}
+                            <div className="w-1/5 text-right text-[10px] text-zinc-500 font-medium">
+                              {u.createdAt ? new Date(u.createdAt).toLocaleDateString('tr-TR') : '-'}
+                            </div>
+                          </div>
+                        ));
+                      })()
+                    ) : (
+                      <div className="py-8 text-center text-zinc-500 text-xs">
+                        Kayıtlı çalışan bulunamadı.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 3: PROFILE */}
           {activeTab === 'profile' && (
             <div className="space-y-6">
@@ -915,9 +1129,8 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
 
                           {/* Role */}
                           <div className="w-[10%]">
-                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase ${
-                              user.role === 'ADMIN' ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-600'
-                            }`}>
+                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase ${user.role === 'ADMIN' ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-600'
+                              }`}>
                               {user.role}
                             </span>
                           </div>
