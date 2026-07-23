@@ -11,11 +11,12 @@ interface AdminAclModalProps {
   onClose: () => void;
   onRefresh: () => void;
   socket?: any;
+  currentUser: User;
 }
 
 type TabType = 'members' | 'employees' | 'settings' | 'profile' | 'activity';
 
-export function AdminAclModal({ projects, currentProject, onClose, onRefresh, socket }: AdminAclModalProps) {
+export function AdminAclModal({ projects, currentProject, onClose, onRefresh, socket, currentUser: initialCurrentUser }: AdminAclModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('members');
   const [selectedProjectId, setSelectedProjectId] = useState(currentProject.id);
   const [users, setUsers] = useState<User[]>([]);
@@ -26,7 +27,7 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh, so
   const [selectedPermission, setSelectedPermission] = useState<ProjectPermissionLevel>('READ');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User>(initialCurrentUser);
 
   // Activity tracking state
   const [activityUsers, setActivityUsers] = useState<User[]>([]);
@@ -65,11 +66,11 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh, so
 
   useEffect(() => {
     fetchUsers();
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
-    }
   }, []);
+
+  useEffect(() => {
+    setCurrentUser(initialCurrentUser);
+  }, [initialCurrentUser]);
 
   // Update edit fields when selected project changes
   useEffect(() => {

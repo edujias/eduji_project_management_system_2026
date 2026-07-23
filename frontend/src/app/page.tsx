@@ -37,6 +37,7 @@ import {
   FileText,
   Settings,
   Activity,
+  User as UserIcon,
 } from 'lucide-react';
 
 const simpleHash = (str: string) => {
@@ -67,6 +68,11 @@ export default function Home() {
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageInput, setMessageInput] = useState('');
+
+  // Typing Indicator States & Refs
+  const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
+  const isSelfTypingRef = useRef(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Active Tab State: 'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes' | 'activity'
   const [activeTab, setActiveTab] = useState<'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes' | 'activity'>('chat');
@@ -162,7 +168,7 @@ export default function Home() {
         leaveChannel(activeChannel.id);
       }
     };
-  }, [activeChannel?.id]);
+  }, [activeChannel?.id, socket]);
 
   // Socket.io Canlı Mesaj Dinleyicisi
   useEffect(() => {
@@ -183,7 +189,41 @@ export default function Home() {
     };
   }, [socket]);
 
-  // Socket.io Canlı Kullanıcı Durum Dinleyicisi (Yöneticinin pasife çekmesi durumunda otomatik çıkış yapar)
+  // Reset typing indicator when switching channels
+  useEffect(() => {
+    setTypingUsers({});
+    isSelfTypingRef.current = false;
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+  }, [activeChannel?.id]);
+
+  // Socket.io Canlı "Yazıyor..." Dinleyicisi
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUserTyping = (data: { channelId: string; user: { id: string; fullName: string }; isTyping: boolean }) => {
+      if (data.channelId === activeChannelRef.current?.id) {
+        setTypingUsers((prev) => {
+          const next = { ...prev };
+          if (data.isTyping) {
+            next[data.user.id] = data.user.fullName;
+          } else {
+            delete next[data.user.id];
+          }
+          return next;
+        });
+      }
+    };
+
+    socket.on('userTyping', handleUserTyping);
+    return () => {
+      socket.off('userTyping', handleUserTyping);
+    };
+  }, [socket, activeChannel?.id]);
+
+  // Socket.io Canlı Kullanıcı Durum Dinleyicisi (Yöneticinin pasife çekmesi durumunda otomatik çıkış yapar ve çevrim içi göstergelerini günceller)
   useEffect(() => {
     if (!socket || !currentUser) return;
 
@@ -192,12 +232,59 @@ export default function Home() {
         if (updatedUser.status && updatedUser.status !== 'ACTIVE') {
           alert('Hesabınız yönetici tarafından pasif duruma getirildi. Sistemden çıkış yapılıyor.');
           handleLogout();
+          return;
         } else {
           const newCurrentUser = { ...currentUser, ...updatedUser };
           setCurrentUser(newCurrentUser);
           localStorage.setItem('user', JSON.stringify(newCurrentUser));
         }
       }
+
+      // Projeler listesindeki kullanıcının çevrimiçi durumunu güncelle
+      setProjects((prevProjects) =>
+        prevProjects.map((p) => {
+          if (p.permissions) {
+            return {
+              ...p,
+              permissions: p.permissions.map((perm) => {
+                if (perm.user && perm.user.id === updatedUser.id) {
+                  return {
+                    ...perm,
+                    user: {
+                      ...perm.user,
+                      isOnline: updatedUser.isOnline,
+                    },
+                  };
+                }
+                return perm;
+              }),
+            };
+          }
+          return p;
+        })
+      );
+
+      // Aktif proje detaylarındaki kullanıcının çevrimiçi durumunu güncelle
+      setActiveProject((prevActive) => {
+        if (prevActive && prevActive.permissions) {
+          return {
+            ...prevActive,
+            permissions: prevActive.permissions.map((perm) => {
+              if (perm.user && perm.user.id === updatedUser.id) {
+                return {
+                  ...perm,
+                  user: {
+                    ...perm.user,
+                    isOnline: updatedUser.isOnline,
+                  },
+                };
+              }
+              return perm;
+            }),
+          };
+        }
+        return prevActive;
+      });
     };
 
     socket.on('userStatusChanged', handleUserStatusChanged);
@@ -420,12 +507,51 @@ export default function Home() {
     localStorage.removeItem('user');
   };
 
+  const handleStartDm = async (targetUserId: string) => {
+    try {
+      const dmChannel = await apiFetch<Channel>('/channels/dm', {
+        method: 'POST',
+        body: JSON.stringify({ targetUserId }),
+      });
+
+      // Update the active channel
+      setActiveChannel(dmChannel);
+      setActiveTab('chat');
+    } catch (err: any) {
+      console.error('DM başlatılamadı:', err);
+      alert('Doğrudan mesaj başlatılırken bir hata oluştu.');
+    }
+  };
+
+  const handleInputChange = (val: string) => {
+    setMessageInput(val);
+    
+    if (!socket || !activeChannel) return;
+
+    if (!isSelfTypingRef.current) {
+      isSelfTypingRef.current = true;
+      socket.emit('typing', { channelId: activeChannel.id, isTyping: true });
+    }
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      isSelfTypingRef.current = false;
+      socket.emit('typing', { channelId: activeChannel.id, isTyping: false });
+    }, 2000);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageInput.trim()) return;
 
     const content = messageInput;
     setMessageInput('');
+
+    if (socket && activeChannel) {
+      isSelfTypingRef.current = false;
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      socket.emit('typing', { channelId: activeChannel.id, isTyping: false });
+    }
 
     // Offline / No Channel local fallback logic
     if (!activeChannel) {
@@ -965,6 +1091,59 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                     );
                   })}
                 </div>
+
+                {/* Ekip Üyeleri (Team Members) Section */}
+                <div className="mt-6 border-t border-slate-800/40 pt-4">
+                  <div className="flex items-center justify-between mb-2.5 px-1">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                      Ekip Üyeleri ({activeProject.permissions?.length || 0})
+                    </span>
+                  </div>
+
+                  <div className="space-y-0.5 animate-fadeIn">
+                    {activeProject.permissions?.map((perm) => {
+                      const member = perm.user;
+                      if (!member) return null;
+                      const isSelf = member.id === currentUser?.id;
+                      
+                      // Check if this is the active DM channel
+                      const isDmActive = activeChannel?.type === 'DIRECT_MESSAGE' && 
+                        activeChannel.members?.some((m) => m.userId === member.id) &&
+                        !isSelf;
+
+                      return (
+                        <button
+                          key={member.id}
+                          onClick={() => handleStartDm(member.id)}
+                          disabled={isSelf}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition ${
+                            isDmActive
+                              ? 'bg-indigo-600 text-white font-bold border border-indigo-500 shadow-sm'
+                              : isSelf
+                                ? 'text-slate-500 cursor-default opacity-85'
+                                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="relative flex-shrink-0">
+                              <div className="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-[9px] text-slate-200 uppercase">
+                                {member.fullName.charAt(0)}
+                              </div>
+                              <span className={`absolute -bottom-0.5 -right-0.5 flex h-2 w-2 rounded-full border border-slate-900 ${
+                                member.isOnline ? 'bg-emerald-500' : 'bg-slate-500'
+                              }`} />
+                            </div>
+                            <span className="truncate">{member.fullName} {isSelf && '(Siz)'}</span>
+                          </div>
+                          
+                          <span className="text-[8px] font-semibold text-slate-500 uppercase tracking-wider scale-90">
+                            {member.role === 'ADMIN' ? 'Yönetici' : 'Çalışan'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -977,7 +1156,11 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
         <header className="h-14 border-b border-slate-800 px-6 flex items-center justify-between bg-slate-900/60 backdrop-blur relative z-30">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="p-2 bg-slate-800 rounded-lg text-indigo-400 border border-slate-700">
-              {activeTab === 'chat' && <Hash className="w-5 h-5" />}
+              {activeTab === 'chat' && (
+                activeChannel?.type === 'DIRECT_MESSAGE'
+                  ? <UserIcon className="w-5 h-5" />
+                  : <Hash className="w-5 h-5" />
+              )}
               {activeTab === 'kanban' && <Kanban className="w-5 h-5" />}
               {activeTab === 'gantt' && <Calendar className="w-5 h-5" />}
               {activeTab === 'files' && <HardDrive className="w-5 h-5" />}
@@ -987,14 +1170,20 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
             </div>
             <div className="min-w-0">
               <h3 className="font-bold text-white text-sm flex items-baseline gap-2">
-                {activeTab === 'chat' && (activeChannel ? `#${activeChannel.name}` : 'Kanal Seçilmedi')}
+                {activeTab === 'chat' && (
+                  activeChannel 
+                    ? activeChannel.type === 'DIRECT_MESSAGE'
+                      ? activeChannel.members?.find((m) => m.userId !== currentUser?.id)?.user?.fullName || 'Özel Mesaj'
+                      : `#${activeChannel.name}`
+                    : 'Kanal Seçilmedi'
+                )}
                 {activeTab === 'kanban' && 'Kanban Görev Panosu'}
                 {activeTab === 'gantt' && 'Gantt Zaman Çizelgesi'}
                 {activeTab === 'files' && 'Dosya Deposu'}
                 {activeTab === 'analytics' && 'Proje Analitiği'}
                 {activeTab === 'notes' && 'Notlarım & Yapılacaklar'}
                 {activeTab === 'activity' && 'Kullanıcı Aktivite İzleme Paneli'}
-                {activeTab === 'chat' && activeProject && (
+                {activeTab === 'chat' && activeProject && activeChannel?.type !== 'DIRECT_MESSAGE' && (
                   <span className="text-sm font-bold text-slate-400">
                     {lang === 'TR' ? ' - ' : ' in '}<span className="text-slate-200">{activeProject.name}</span>
                   </span>
@@ -1002,7 +1191,9 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
               </h3>
               {activeTab === 'chat' && (
                 <p className="text-[11px] text-slate-400 truncate">
-                  {activeProject?.description || 'Dahili Proje Yönetimi & AI İletişim Platformu.'}
+                  {activeChannel?.type === 'DIRECT_MESSAGE'
+                    ? 'Birebir özel canlı sohbet penceresi.'
+                    : activeProject?.description || 'Dahili Proje Yönetimi & AI İletişim Platformu.'}
                 </p>
               )}
             </div>
@@ -1129,6 +1320,19 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
               </button>
             </div>
 
+            {/* Typing Indicator Display */}
+            {Object.keys(typingUsers).length > 0 && (
+              <div className="px-4 py-1 text-slate-400 text-xs flex items-center gap-1.5 animate-pulse bg-slate-950/40 border-t border-slate-900">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                </span>
+                <span className="italic font-medium text-slate-300">
+                  {Object.values(typingUsers).join(', ')} {Object.keys(typingUsers).length === 1 ? 'yazıyor...' : 'yazıyorlar...'}
+                </span>
+              </div>
+            )}
+
             {/* Message Input Bar */}
             <footer className="p-4 border-t border-slate-800 bg-slate-900/40">
               <form onSubmit={handleSendMessage} className="flex items-center gap-2">
@@ -1136,7 +1340,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                   <input
                     type="text"
                     value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
+                    onChange={(e) => handleInputChange(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -1238,12 +1442,14 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
       </main>
 
       {/* MODALS */}
-      {showAdminAclModal && activeProject && (
+      {showAdminAclModal && activeProject && currentUser && (
         <AdminAclModal
           projects={projects}
           currentProject={activeProject}
           onClose={() => setShowAdminAclModal(false)}
           onRefresh={loadProjects}
+          socket={socket}
+          currentUser={currentUser}
         />
       )}
 
