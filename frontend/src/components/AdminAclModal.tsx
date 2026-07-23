@@ -10,11 +10,12 @@ interface AdminAclModalProps {
   currentProject: Project;
   onClose: () => void;
   onRefresh: () => void;
+  socket?: any;
 }
 
 type TabType = 'members' | 'employees' | 'settings' | 'profile' | 'activity';
 
-export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: AdminAclModalProps) {
+export function AdminAclModal({ projects, currentProject, onClose, onRefresh, socket }: AdminAclModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('members');
   const [selectedProjectId, setSelectedProjectId] = useState(currentProject.id);
   const [users, setUsers] = useState<User[]>([]);
@@ -229,6 +230,54 @@ export function AdminAclModal({ projects, currentProject, onClose, onRefresh }: 
       fetchActivity();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUserStatusChanged = (updatedUser: User) => {
+      // 1. Update general users list (only employees)
+      setUsers((prev) => {
+        if (updatedUser.role === 'ADMIN') return prev.filter((u) => u.id !== updatedUser.id);
+        const index = prev.findIndex((u) => u.id === updatedUser.id);
+        if (index > -1) {
+          const next = [...prev];
+          next[index] = { ...next[index], ...updatedUser };
+          return next;
+        } else {
+          return [...prev, updatedUser].sort((a, b) => a.fullName.localeCompare(b.fullName));
+        }
+      });
+
+      // 2. Update allSystemUsers list (employees tab - all users)
+      setAllSystemUsers((prev) => {
+        const index = prev.findIndex((u) => u.id === updatedUser.id);
+        if (index > -1) {
+          const next = [...prev];
+          next[index] = { ...next[index], ...updatedUser };
+          return next;
+        } else {
+          return [...prev, updatedUser].sort((a, b) => a.fullName.localeCompare(b.fullName));
+        }
+      });
+
+      // 3. Update activity users list (activity tab - all users)
+      setActivityUsers((prev) => {
+        const index = prev.findIndex((u) => u.id === updatedUser.id);
+        if (index > -1) {
+          const next = [...prev];
+          next[index] = { ...next[index], ...updatedUser };
+          return next;
+        } else {
+          return [...prev, updatedUser].sort((a, b) => a.fullName.localeCompare(b.fullName));
+        }
+      });
+    };
+
+    socket.on('userStatusChanged', handleUserStatusChanged);
+    return () => {
+      socket.off('userStatusChanged', handleUserStatusChanged);
+    };
+  }, [socket]);
 
   const handleAssignPermission = async (e: React.FormEvent) => {
     e.preventDefault();

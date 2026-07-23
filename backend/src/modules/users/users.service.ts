@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from 'src/database/prisma.service';
 import { SystemRole } from 'src/common/enums';
+import { ChatGateway } from '../messages/chat.gateway';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private chatGateway: ChatGateway,
+  ) {}
 
   async onModuleInit() {
     await this.prisma.user.updateMany({
@@ -51,17 +55,47 @@ export class UsersService implements OnModuleInit {
   }
 
   async updateUserRole(id: string, role: SystemRole) {
-    return this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id },
       data: { role },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        isOnline: true,
+        lastLoginAt: true,
+        lastLogoutAt: true,
+        totalPresenceTime: true,
+      },
     });
+
+    this.chatGateway.server.emit('userStatusChanged', updatedUser);
+    return updatedUser;
   }
 
   async updateUserStatus(id: string, status: string) {
-    return this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id },
       data: { status },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        isOnline: true,
+        lastLoginAt: true,
+        lastLogoutAt: true,
+        totalPresenceTime: true,
+      },
     });
+
+    this.chatGateway.server.emit('userStatusChanged', updatedUser);
+    return updatedUser;
   }
 
   async getActivityReport() {

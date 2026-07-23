@@ -31,6 +31,11 @@ export async function apiFetch<T>(
   const data = await response.json();
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.reload();
+    }
     const apiError = new Error(data.message || 'Bir hata oluştu.');
     (apiError as any).statusCode = response.status;
     throw apiError;

@@ -130,7 +130,12 @@ export default function Home() {
 
     const savedToken = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
-    if (savedToken && savedUser) {
+    if (savedToken === 'mock-access-token') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setToken(null);
+      setCurrentUser(null);
+    } else if (savedToken && savedUser) {
       setToken(savedToken);
       let userObj = JSON.parse(savedUser);
       if (userObj.fullName && userObj.fullName.includes('Zeynep Yılmaz') && userObj.role === 'ADMIN') {
@@ -177,6 +182,29 @@ export default function Home() {
       socket.off('newMessage', handleNewMessage);
     };
   }, [socket]);
+
+  // Socket.io Canlı Kullanıcı Durum Dinleyicisi (Yöneticinin pasife çekmesi durumunda otomatik çıkış yapar)
+  useEffect(() => {
+    if (!socket || !currentUser) return;
+
+    const handleUserStatusChanged = (updatedUser: any) => {
+      if (updatedUser.id === currentUser.id) {
+        if (updatedUser.status && updatedUser.status !== 'ACTIVE') {
+          alert('Hesabınız yönetici tarafından pasif duruma getirildi. Sistemden çıkış yapılıyor.');
+          handleLogout();
+        } else {
+          const newCurrentUser = { ...currentUser, ...updatedUser };
+          setCurrentUser(newCurrentUser);
+          localStorage.setItem('user', JSON.stringify(newCurrentUser));
+        }
+      }
+    };
+
+    socket.on('userStatusChanged', handleUserStatusChanged);
+    return () => {
+      socket.off('userStatusChanged', handleUserStatusChanged);
+    };
+  }, [socket, currentUser]);
 
   useEffect(() => {
     if (activeTab === 'chat') {
@@ -347,6 +375,12 @@ export default function Home() {
         // Validate password hash
         if (targetUser.passwordHash !== simpleHash(password)) {
           setAuthError('E-posta adresi veya şifre hatalı (Şifre uyuşmuyor).');
+          return;
+        }
+
+        // Validate user status
+        if (targetUser.status && targetUser.status !== 'ACTIVE') {
+          setAuthError('Şu an pasif durumdasınız, giriş yapamazsınız.');
           return;
         }
         

@@ -63,7 +63,7 @@ export class AuthService {
     }
 
     if (user.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Hesabınız dondurulmuş veya aktif değil.');
+      throw new UnauthorizedException('Şu an pasif durumdasınız, giriş yapamazsınız.');
     }
 
     const token = this.generateToken(user.id, user.email, user.role);
