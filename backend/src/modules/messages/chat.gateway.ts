@@ -57,17 +57,74 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       client.data.user = user;
+      client.data.connectedAt = Date.now();
       this.activeUsers.set(client.id, user.id);
 
       console.log(`[Socket] Kullanıcı bağlandı: ${user.fullName} (${client.id})`);
+
+      // İlk bağlantı ise (yani başka bir sekmeden bağlı değilse) online yap
+      const connectionCount = Array.from(this.activeUsers.values()).filter(
+        (uid) => uid === user.id,
+      ).length;
+
+      if (connectionCount === 1) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            isOnline: true,
+            lastLoginAt: new Date(),
+          },
+        });
+        console.log(`[Socket] DB: ${user.fullName} aktif/online yapıldı.`);
+      }
     } catch (err) {
       client.disconnect();
     }
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
+    const user = client.data?.user;
+    const connectedAt = client.data?.connectedAt;
+
     this.activeUsers.delete(client.id);
     console.log(`[Socket] Bağlantı koptu: ${client.id}`);
+
+    if (user) {
+      try {
+        const hasOtherConnections = Array.from(this.activeUsers.values()).some(
+          (uid) => uid === user.id,
+        );
+
+        const updateData: any = {};
+
+        if (!hasOtherConnections) {
+          updateData.isOnline = false;
+          updateData.lastLogoutAt = new Date();
+        }
+
+        if (connectedAt) {
+          const durationSeconds = Math.round((Date.now() - connectedAt) / 1000);
+          if (durationSeconds > 0) {
+            updateData.totalPresenceTime = {
+              increment: durationSeconds,
+            };
+            console.log(`[Socket] Kullanıcı ${user.fullName} bu oturumda ${durationSeconds} saniye geçirdi.`);
+          }
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: updateData,
+          });
+          if (!hasOtherConnections) {
+            console.log(`[Socket] DB: ${user.fullName} çevrimdışı yapıldı.`);
+          }
+        }
+      } catch (err) {
+        console.error('[Socket] Bağlantı sonlanırken aktivite kaydedilemedi:', err);
+      }
+    }
   }
 
   @SubscribeMessage('joinChannel')

@@ -1,10 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from 'src/database/prisma.service';
 import { SystemRole } from 'src/common/enums';
 
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
   constructor(private prisma: PrismaService) {}
+
+  async onModuleInit() {
+    await this.prisma.user.updateMany({
+      where: { isOnline: true },
+      data: { isOnline: false },
+    });
+    console.log('[UsersService] Reset all users online status to false on startup.');
+  }
 
   async findAll() {
     return this.prisma.user.findMany({
@@ -53,6 +61,25 @@ export class UsersService {
     return this.prisma.user.update({
       where: { id },
       data: { status },
+    });
+  }
+
+  async getActivityReport() {
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        avatarUrl: true,
+        role: true,
+        status: true,
+        isOnline: true,
+        lastLoginAt: true,
+        lastLogoutAt: true,
+        totalPresenceTime: true,
+        createdAt: true,
+      },
+      orderBy: { fullName: 'asc' },
     });
   }
 }

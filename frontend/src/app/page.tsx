@@ -15,6 +15,7 @@ import { GanttView } from '@/components/GanttView';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
 import { PersonalNotes } from '@/components/PersonalNotes';
+import { UserActivityPanel } from '@/components/UserActivityPanel';
 import {
   Hash,
   MessageSquare,
@@ -36,6 +37,7 @@ import {
   Terminal,
   FileText,
   Settings,
+  Activity,
 } from 'lucide-react';
 
 const simpleHash = (str: string) => {
@@ -67,8 +69,8 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageInput, setMessageInput] = useState('');
 
-  // Active Tab State: 'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes'
-  const [activeTab, setActiveTab] = useState<'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes'>('chat');
+  // Active Tab State: 'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes' | 'activity'
+  const [activeTab, setActiveTab] = useState<'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes' | 'activity'>('chat');
 
   // Active channel ref for Socket listener closure fix
   const activeChannelRef = useRef<Channel | null>(null);
@@ -93,7 +95,7 @@ export default function Home() {
     // Populate default offline users list in localStorage if not already present or needs clean names
     const existing = localStorage.getItem('offline_users');
     let loadedUsers = [];
-    if (!existing || existing.includes('(Offline)')) {
+    if (!existing || existing.includes('ayse@company.com') || existing.includes('zeyn@company.com') || !existing.includes('mehmet@company.com')) {
       const defaultUsers = [
         {
           id: 'mock-admin-id',
@@ -104,12 +106,20 @@ export default function Home() {
           plainPassword: 'admin123',
         },
         {
-          id: 'mock-emp-zeyn-id',
-          email: 'zeyn@company.com',
-          fullName: 'Zeynep Yılmaz',
+          id: 'mock-emp-zeynep-id',
+          email: 'zeynep@company.com',
+          fullName: 'Zeynep Kaya',
           role: 'EMPLOYEE',
-          passwordHash: simpleHash('employee123'),
-          plainPassword: 'employee123',
+          passwordHash: simpleHash('admin123'),
+          plainPassword: 'admin123',
+        },
+        {
+          id: 'mock-emp-mehmet-id',
+          email: 'mehmet@company.com',
+          fullName: 'Mehmet Demir',
+          role: 'EMPLOYEE',
+          passwordHash: simpleHash('admin123'),
+          plainPassword: 'admin123',
         }
       ];
       localStorage.setItem('offline_users', JSON.stringify(defaultUsers));
@@ -858,6 +868,19 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           >
             <FileText className="w-4 h-4 text-indigo-400" /> Notlarım & Yapılacaklar
           </button>
+
+          {currentUser.role === 'ADMIN' && (
+            <button
+              onClick={() => setActiveTab('activity')}
+              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
+                activeTab === 'activity'
+                  ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <Activity className="w-4 h-4 text-indigo-400" /> Kullanıcı Aktiviteleri
+            </button>
+          )}
         </div>
 
         {/* Channels List under Active Project (Only shown when on Chat tab) */}
@@ -927,6 +950,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
               {activeTab === 'files' && <HardDrive className="w-5 h-5" />}
               {activeTab === 'analytics' && <BarChart3 className="w-5 h-5" />}
               {activeTab === 'notes' && <FileText className="w-5 h-5" />}
+              {activeTab === 'activity' && <Activity className="w-5 h-5" />}
             </div>
             <div className="min-w-0">
               <h3 className="font-bold text-white text-sm flex items-baseline gap-2">
@@ -936,6 +960,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 {activeTab === 'files' && 'Dosya Deposu'}
                 {activeTab === 'analytics' && 'Proje Analitiği'}
                 {activeTab === 'notes' && 'Notlarım & Yapılacaklar'}
+                {activeTab === 'activity' && 'Kullanıcı Aktivite İzleme Paneli'}
                 {activeTab === 'chat' && activeProject && (
                   <span className="text-sm font-bold text-slate-400">
                     {lang === 'TR' ? ' - ' : ' in '}<span className="text-slate-200">{activeProject.name}</span>
@@ -1176,6 +1201,11 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
         {/* TAB 6: PERSONAL PRIVATE NOTES & TO-DO */}
         {activeTab === 'notes' && currentUser && (
           <PersonalNotes currentUser={currentUser} />
+        )}
+
+        {/* TAB 7: USER ACTIVITY MONITORING */}
+        {activeTab === 'activity' && currentUser && (
+          <UserActivityPanel currentUser={currentUser} />
         )}
       </main>
 

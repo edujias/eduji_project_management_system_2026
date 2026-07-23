@@ -6,6 +6,10 @@ export interface User {
   role: 'ADMIN' | 'EMPLOYEE';
   status: 'ACTIVE' | 'INACTIVE';
   createdAt: string;
+  isOnline?: boolean;
+  lastLoginAt?: string | null;
+  lastLogoutAt?: string | null;
+  totalPresenceTime?: number;
 }
 
 export type ProjectPermissionLevel = 'READ' | 'WRITE';

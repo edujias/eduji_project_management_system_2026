@@ -18,6 +18,12 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Activity tracking fields
+  isOnline          Boolean   @default(false)
+  lastLoginAt       DateTime?
+  lastLogoutAt      DateTime?
+  totalPresenceTime Int       @default(0) // Cumulative duration in seconds
+
   createdChannels   Channel[]           @relation("ChannelCreator")
   channelMemberships ChannelMember[]
   messages          Message[]

@@ -22,6 +22,13 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
+  @Get('activity')
+  @UseGuards(RolesGuard)
+  @Roles(SystemRole.ADMIN)
+  async getActivityReport() {
+    return this.usersService.getActivityReport();
+  }
+
   @Get(':id')
   async findById(@Param('id') id: string) {
     return this.usersService.findById(id);
