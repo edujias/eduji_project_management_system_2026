@@ -63,6 +63,7 @@ export default function Home() {
 
   // App Data
   const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -154,6 +155,7 @@ export default function Home() {
   useEffect(() => {
     if (token) {
       loadProjects();
+      loadUsers();
     }
   }, [token]);
 
@@ -370,6 +372,26 @@ export default function Home() {
           setActiveChannel(latestProj.channels[0]);
         }
       }
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const data = await apiFetch<User[]>('/users');
+      setUsers(data);
+    } catch (err) {
+      console.error('Kullanıcılar yüklenemedi, offline moduna geçiliyor:', err);
+      const offlineUsersRaw = localStorage.getItem('offline_users');
+      const offlineUsers = offlineUsersRaw ? JSON.parse(offlineUsersRaw) : [];
+      setUsers(offlineUsers.map((u: any, i: number) => ({
+        id: u.id || `mock-${i}`,
+        email: u.email,
+        fullName: u.fullName,
+        role: u.role,
+        status: 'ACTIVE',
+        isOnline: true,
+        createdAt: new Date().toISOString(),
+      })));
     }
   };
 
@@ -1084,32 +1106,29 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 <div className="mt-6 border-t border-slate-800/40 pt-4">
                   <div className="flex items-center justify-between mb-2.5 px-1">
                     <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                      Ekip Üyeleri ({activeProject.permissions?.length || 0})
+                      Ekip Üyeleri ({users.length > 0 ? users.length - 1 : 0})
                     </span>
                   </div>
 
                   <div className="space-y-0.5 animate-fadeIn">
-                    {activeProject.permissions?.map((perm) => {
-                      const member = perm.user;
+                    {users.map((member) => {
                       if (!member) return null;
-                      const isSelf = member.id === currentUser?.id;
+
+                      // Kendimizi ekip üyeleri (DM) listesinde göstermiyoruz
+                      if (member.id === currentUser?.id) return null;
                       
                       // Check if this is the active DM channel
                       const isDmActive = activeChannel?.type === 'DIRECT_MESSAGE' && 
-                        activeChannel.members?.some((m) => m.userId === member.id) &&
-                        !isSelf;
+                        activeChannel.members?.some((m) => m.userId === member.id);
 
                       return (
                         <button
                           key={member.id}
                           onClick={() => handleStartDm(member.id)}
-                          disabled={isSelf}
                           className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition ${
                             isDmActive
                               ? 'bg-indigo-600 text-white font-bold border border-indigo-500 shadow-sm'
-                              : isSelf
-                                ? 'text-slate-500 cursor-default opacity-85'
-                                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
@@ -1122,7 +1141,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                               }`} />
                             </div>
                             <span className="truncate">
-                              {member.fullName} {isSelf && '(Siz)'}
+                              {member.fullName}
                               {member.status !== 'ACTIVE' && (
                                 <span className="text-[10px] text-red-500 font-bold ml-1.5 font-mono">(Pasif)</span>
                               )}

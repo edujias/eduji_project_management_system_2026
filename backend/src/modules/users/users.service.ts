@@ -27,6 +27,7 @@ export class UsersService implements OnModuleInit {
         avatarUrl: true,
         role: true,
         status: true,
+        isOnline: true,
         createdAt: true,
       },
       orderBy: { fullName: 'asc' },

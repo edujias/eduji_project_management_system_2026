@@ -66,6 +66,17 @@ export class MessagesService {
     // Eğer mesajı yazan zaten Gemini AI ise tekrar yanıt verme (sonsuz döngüyü engeller)
     if (sender.email === 'gemini@company.com') return;
 
+    // Eğer kanal bir birebir mesajlaşma (DIRECT_MESSAGE) ise ve Gemini bu kanalın üyesi değilse yanıt verme
+    if (channel.type === 'DIRECT_MESSAGE') {
+      const isBotMember = await this.prisma.channelMember.findFirst({
+        where: {
+          channelId: channel.id,
+          user: { email: 'gemini@company.com' },
+        },
+      });
+      if (!isBotMember) return;
+    }
+
     // Gemini AI Kullanıcısını Bul veya Yoksa Otomatik Oluştur
     let aiUser = await this.prisma.user.findUnique({
       where: { email: 'gemini@company.com' },

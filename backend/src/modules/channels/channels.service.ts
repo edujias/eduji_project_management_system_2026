@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from 'src/database/prisma.service';
 import { ChannelType } from 'src/common/enums';
 
@@ -24,6 +24,9 @@ export class ChannelsService {
   }
 
   async getOrCreateDmChannel(dto: { targetUserId: string }, currentUserId: string) {
+    if (dto.targetUserId === currentUserId) {
+      throw new BadRequestException('Kendinizle birebir mesajlaşma başlatamazsınız.');
+    }
     const existingDm = await this.prisma.channel.findFirst({
       where: {
         type: ChannelType.DIRECT_MESSAGE,
