@@ -1391,7 +1391,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
         )}
 
         {/* TAB 3: GANTT TIMELINE */}
-        {activeTab === 'gantt' && currentUser && (
+        {activeTab === 'gantt' && (
           <GanttView
             project={
               activeProject || {
@@ -1402,7 +1402,6 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 channels: [],
               }
             }
-            currentUser={currentUser}
           />
         )}
 
