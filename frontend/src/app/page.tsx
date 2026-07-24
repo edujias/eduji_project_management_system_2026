@@ -10,7 +10,6 @@ import { CreateChannelModal } from '@/components/CreateChannelModal';
 import { GeminiRoadmapModal } from '@/components/GeminiRoadmapModal';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { FileExplorer } from '@/components/FileExplorer';
-import { ProjectAnalytics } from '@/components/ProjectAnalytics';
 import { GanttView } from '@/components/GanttView';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { PersonalNotes } from '@/components/PersonalNotes';
@@ -1007,17 +1006,6 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           </button>
 
           <button
-            onClick={() => setActiveTab('analytics')}
-            className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
-              activeTab === 'analytics'
-                ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4 text-indigo-400" /> Proje Analitiği
-          </button>
-
-          <button
             onClick={() => setActiveTab('notes')}
             className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
               activeTab === 'notes'
@@ -1408,21 +1396,6 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
         {/* TAB 4: FILE EXPLORER & AI ANALYZER */}
         {activeTab === 'files' && (
           <FileExplorer
-            project={
-              activeProject || {
-                id: '',
-                name: 'Seçili Proje Yok',
-                code: 'NONE',
-                description: 'Veritabanı bağlantısı yok.',
-                channels: [],
-              }
-            }
-          />
-        )}
-
-        {/* TAB 5: PROJECT ANALYTICS DASHBOARD */}
-        {activeTab === 'analytics' && (
-          <ProjectAnalytics
             project={
               activeProject || {
                 id: '',
