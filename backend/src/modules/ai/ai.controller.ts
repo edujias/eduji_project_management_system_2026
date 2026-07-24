@@ -16,4 +16,9 @@ export class AiController {
   async generateRoadmap(@Param('projectId') projectId: string) {
     return this.aiService.generateProjectRoadmap(projectId);
   }
+
+  @Post('analyze-file/:fileId')
+  async analyzeFile(@Param('fileId') fileId: string) {
+    return this.aiService.analyzeFileAsset(fileId);
+  }
 }

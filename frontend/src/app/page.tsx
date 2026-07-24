@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Project, Channel, Message } from '@/types';
+import { User, Project, Channel, Message, FileAsset } from '@/types';
 import { apiFetch } from '@/lib/api';
 import { useSocket } from '@/hooks/useSocket';
 import { AdminAclModal } from '@/components/AdminAclModal';
@@ -37,6 +37,7 @@ import {
   Settings,
   Activity,
   User as UserIcon,
+  Trash2,
 } from 'lucide-react';
 
 const simpleHash = (str: string) => {
@@ -86,9 +87,9 @@ export default function Home() {
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
   const [showGeminiModal, setShowGeminiModal] = useState(false);
-
-  // Language & Theme State
-  const [lang, setLang] = useState<'TR' | 'EN'>('TR');
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [kanbanRefreshKey, setKanbanRefreshKey] = useState(0);
 
@@ -224,6 +225,22 @@ export default function Home() {
     };
   }, [socket, activeChannel?.id]);
 
+  // Socket.io Canlı Sohbet Temizleme Dinleyicisi
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleChatCleared = (data: { channelId: string }) => {
+      if (activeChannel && activeChannel.id === data.channelId) {
+        setMessages([]);
+      }
+    };
+
+    socket.on('chatCleared', handleChatCleared);
+    return () => {
+      socket.off('chatCleared', handleChatCleared);
+    };
+  }, [socket, activeChannel?.id]);
+
   // Socket.io Canlı Kullanıcı Durum Dinleyicisi (Yöneticinin pasife çekmesi durumunda otomatik çıkış yapar ve çevrim içi göstergelerini günceller)
   useEffect(() => {
     if (!socket || !currentUser) return;
@@ -353,9 +370,9 @@ export default function Home() {
         code: 'INT',
         description: 'Simülasyon Modu (Canlı bağlantı için lütfen Docker\'ı açın).',
         channels: [
-          { id: '1', name: 'genel', projectId: 'mock-proj-id' },
-          { id: '2', name: 'rastgele', projectId: 'mock-proj-id' },
-          { id: '3', name: 'yazilim-ekibi', projectId: 'mock-proj-id' }
+          { id: '1', name: 'genel', projectId: 'mock-proj-id', type: 'PROJECT_PUBLIC', createdById: 'mock-admin-id', createdAt: '2026-07-22T12:00:00.000Z' },
+          { id: '2', name: 'rastgele', projectId: 'mock-proj-id', type: 'PROJECT_PUBLIC', createdById: 'mock-admin-id', createdAt: '2026-07-22T12:00:00.000Z' },
+          { id: '3', name: 'yazilim-ekibi', projectId: 'mock-proj-id', type: 'PROJECT_PUBLIC', createdById: 'mock-admin-id', createdAt: '2026-07-22T12:00:00.000Z' }
         ],
         permissions: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('offline_permissions_mock-proj-id') || '[]') : [],
         createdAt: '2026-07-22T12:00:00.000Z',
@@ -401,6 +418,110 @@ export default function Home() {
       setMessages(data);
     } catch (err: any) {
       console.error('Mesaj çekme hatası:', err);
+    }
+  };
+
+  const handleClearChat = async () => {
+    if (!activeChannel) return;
+    const confirmClear = window.confirm('Bu sohbet odasındaki tüm mesajları silmek istediğinize emin misiniz? Bu işlem geri alınamaz.');
+    if (!confirmClear) return;
+
+    try {
+      await apiFetch(`/messages/channel/${activeChannel.id}`, {
+        method: 'DELETE',
+      });
+      setMessages([]);
+    } catch (err: any) {
+      console.warn('Backend silme başarısız, lokal olarak temizleniyor:', err);
+      setMessages([]);
+    }
+  };
+
+  const handleAttachmentUpload = async (file: File | undefined, type: 'photo' | 'file') => {
+    if (!file || !activeProject || !activeChannel) return;
+    setShowAttachmentMenu(false);
+
+    try {
+      // 1. Get upload URL
+      const { uploadUrl, s3Key } = await apiFetch<{ uploadUrl: string; s3Key: string }>('/storage/upload-url', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileName: file.name,
+          projectId: activeProject.id,
+        }),
+      });
+
+      // 2. PUT file content
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Dosya yüklenemedi.');
+      }
+
+      // 3. Register the file asset
+      const newFile = await apiFetch<FileAsset>('/storage/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: activeProject.id,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type || 'application/octet-stream',
+          s3Key: s3Key,
+        }),
+      });
+
+      // 4. Send the chat message containing this attachment
+      const messageContent = type === 'photo' ? `🖼️ Fotoğraf: ${file.name}` : `📂 Dosya: ${file.name}`;
+      await apiFetch<Message>('/messages', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelId: activeChannel.id,
+          content: messageContent,
+          attachmentIds: [newFile.id],
+        }),
+      });
+
+      loadChannelMessages(activeChannel.id);
+    } catch (err: any) {
+      console.warn('Backend dosya gönderimi başarısız, çevrimdışı simülasyon moduna geçiliyor:', err);
+      // Fallback local mock message
+      const mockFileId = `offline-file-${Math.random()}`;
+      const mockFile: FileAsset = {
+        id: mockFileId,
+        projectId: activeProject.id,
+        uploadedById: currentUser?.id || 'mock-user-id',
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || (type === 'photo' ? 'image/png' : 'application/octet-stream'),
+        s3Key: 'mock-s3-key',
+        publicUrl: URL.createObjectURL(file),
+        createdAt: new Date().toISOString(),
+      };
+      
+      const mockMsg: Message = {
+        id: Math.random().toString(),
+        channelId: activeChannel.id,
+        senderId: currentUser?.id || 'mock-user-id',
+        content: type === 'photo' ? `🖼️ Fotoğraf: ${file.name}` : `📂 Dosya: ${file.name}`,
+        createdAt: new Date().toISOString(),
+        sender: currentUser || {
+          id: 'mock-user-id',
+          email: 'user@company.com',
+          fullName: 'Ahmet Yılmaz (Offline)',
+          role: 'ADMIN',
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
+        },
+        attachments: [mockFile],
+      };
+      
+      setMessages((prev) => [...prev, mockMsg]);
     }
   };
 
@@ -465,6 +586,8 @@ export default function Home() {
           email: newUser.email,
           fullName: newUser.fullName,
           role: 'EMPLOYEE',
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
         };
         
         const mockToken = 'mock-access-token';
@@ -507,6 +630,8 @@ export default function Home() {
           email: targetUser.email,
           fullName: targetUser.fullName,
           role: targetUser.role as any,
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
         };
         
         const mockToken = 'mock-access-token';
@@ -580,12 +705,15 @@ export default function Home() {
         id: Math.random().toString(),
         content,
         channelId: 'mock-channel-id',
+        senderId: currentUser?.id || 'mock-user-id',
         createdAt: new Date().toISOString(),
         sender: currentUser || {
           id: 'mock-user-id',
           email: 'user@company.com',
           fullName: 'Ahmet Yılmaz (Offline)',
           role: 'ADMIN',
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
         },
       };
       setMessages((prev) => [...prev, mockMsg]);
@@ -609,12 +737,15 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           id: Math.random().toString(),
           content: aiResponse,
           channelId: 'mock-channel-id',
+          senderId: 'gemini-user-id',
           createdAt: new Date().toISOString(),
           sender: {
             id: 'gemini-user-id',
             email: 'gemini@company.com',
             fullName: 'Gemini AI',
-            role: 'USER',
+            role: 'EMPLOYEE',
+            status: 'ACTIVE',
+            createdAt: new Date().toISOString(),
           },
         };
         setMessages((prev) => [...prev, aiMsg]);
@@ -648,12 +779,15 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
         id: Math.random().toString(),
         content,
         channelId: currentChanId,
+        senderId: currentUser?.id || 'mock-user-id',
         createdAt: new Date().toISOString(),
         sender: currentUser || {
           id: 'mock-user-id',
           email: 'user@company.com',
           fullName: 'Ahmet Yılmaz (Offline)',
           role: 'ADMIN',
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
         },
       };
       setMessages((prev) => [...prev, mockMsg]);
@@ -677,12 +811,15 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           id: Math.random().toString(),
           content: aiResponse,
           channelId: currentChanId,
+          senderId: 'gemini-user-id',
           createdAt: new Date().toISOString(),
           sender: {
             id: 'gemini-user-id',
             email: 'gemini@company.com',
             fullName: 'Gemini AI',
-            role: 'USER',
+            role: 'EMPLOYEE',
+            status: 'ACTIVE',
+            createdAt: new Date().toISOString(),
           },
         };
         setMessages((prev) => [...prev, aiMsg]);
@@ -1197,7 +1334,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 {activeTab === 'activity' && 'Kullanıcı Aktivite İzleme Paneli'}
                 {activeTab === 'chat' && activeProject && activeChannel?.type !== 'DIRECT_MESSAGE' && (
                   <span className="text-sm font-bold text-slate-400">
-                    {lang === 'TR' ? ' - ' : ' in '}<span className="text-slate-200">{activeProject.name}</span>
+                     - <span className="text-slate-200">{activeProject.name}</span>
                   </span>
                 )}
               </h3>
@@ -1215,23 +1352,25 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
             {/* Notification Center */}
             <NotificationCenter />
 
-            {/* Language Switcher */}
-            <button
-              onClick={() => setLang(lang === 'TR' ? 'EN' : 'TR')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition flex items-center gap-1.5"
-              title="Dil Değiştir / Change Language"
-            >
-              <Globe className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{lang === 'TR' ? '🇹🇷 TR' : '🇬🇧 EN'}</span>
-            </button>
+            {/* Clear Chat Button */}
+            {activeTab === 'chat' && activeChannel && (
+              <button
+                onClick={handleClearChat}
+                className="p-2 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/40 text-rose-400 rounded-xl transition flex items-center justify-center cursor-pointer"
+                title="Sohbeti Temizle"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+              </button>
+            )}
 
             {/* ✨ Gemini AI Roadmap Modal Trigger */}
             {activeProject && (
               <button
                 onClick={() => setShowGeminiModal(true)}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-purple-500/20 transition flex items-center gap-1.5"
+                className="p-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl shadow-lg shadow-purple-500/20 transition flex items-center justify-center cursor-pointer"
+                title="Gemini AI Yol Haritası"
               >
-                <Sparkles className="w-4 h-4 animate-pulse" /> Gemini AI Yol Haritası
+                <Sparkles className="w-4 h-4 animate-pulse" />
               </button>
             )}
           </div>
@@ -1267,15 +1406,71 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                             })}
                           </span>
                         </div>
-                        <div
-                          className={`border rounded-xl p-3 text-sm inline-block max-w-2xl leading-relaxed shadow-sm whitespace-pre-line ${
-                            isAi
-                              ? 'bg-purple-950/40 border-purple-800/50 text-purple-100'
-                              : 'bg-slate-900 border-slate-800 text-slate-300'
-                          }`}
-                        >
-                          {msg.content}
-                        </div>
+                        {/* Mesaj İçeriği veya Önizlemesi */}
+                        {(!msg.attachments || msg.attachments.length === 0) ? (
+                          <div
+                            className={`border rounded-xl p-3 text-sm inline-block max-w-2xl leading-relaxed shadow-sm whitespace-pre-line ${
+                              isAi
+                                ? 'bg-purple-950/40 border-purple-800/50 text-purple-100'
+                                : 'bg-slate-900 border-slate-800 text-slate-300'
+                            }`}
+                          >
+                            {msg.content}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {msg.attachments.map((file) => {
+                              const isImage = file.mimeType?.startsWith('image/') || 
+                                file.fileName.toLowerCase().endsWith('.png') ||
+                                file.fileName.toLowerCase().endsWith('.jpg') ||
+                                file.fileName.toLowerCase().endsWith('.jpeg') ||
+                                file.fileName.toLowerCase().endsWith('.gif') ||
+                                file.fileName.toLowerCase().endsWith('.webp');
+                              
+                              const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001/api';
+                              const fileUrl = file.publicUrl || `${backendUrl}/storage/file/${file.s3Key}`;
+                              
+                              return (
+                                <div key={file.id} className="max-w-md">
+                                  {isImage ? (
+                                    <div className="flex flex-col gap-1.5">
+                                      <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="block relative group overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-md">
+                                        <img
+                                          src={fileUrl}
+                                          alt={file.fileName}
+                                          className="max-h-72 object-contain hover:scale-[1.01] transition duration-350 rounded-2xl"
+                                        />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-xs text-white font-medium">
+                                          Tıklayarak Yeni Sekmede Aç
+                                        </div>
+                                      </a>
+                                      {msg.content && !msg.content.startsWith('🖼️ Fotoğraf:') && (
+                                        <div className="text-xs text-slate-400 px-1">{msg.content}</div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col gap-1">
+                                      <a
+                                        href={fileUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download={file.fileName}
+                                        className="flex items-center gap-2.5 p-3 bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-850 rounded-xl text-xs text-indigo-400 font-semibold transition"
+                                      >
+                                        <Paperclip className="w-4 h-4 text-indigo-500" />
+                                        <span className="truncate flex-1 text-slate-300">{file.fileName}</span>
+                                        <span className="text-[10px] text-slate-500 font-mono">({(file.fileSize / 1024).toFixed(1)} KB)</span>
+                                      </a>
+                                      {msg.content && !msg.content.startsWith('📂 Dosya:') && (
+                                        <div className="text-xs text-slate-400 px-1">{msg.content}</div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {/* Emoji Reactions Bar */}
                         <div className="flex items-center gap-1.5 mt-1.5 opacity-70 group-hover:opacity-100 transition">
@@ -1362,9 +1557,34 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                     placeholder={`#${activeChannel?.name || 'kanalina'} mesaj gönder... (/ozet, /anket veya sesli mesaj kullanın)`}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-4 pr-12 py-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition shadow-inner"
                   />
+                  {showAttachmentMenu && (
+                    <div className="absolute right-3 bottom-12 bg-slate-900 border border-slate-800 rounded-xl p-1.5 shadow-xl flex flex-col gap-1 w-36 z-50 animate-fadeIn">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          photoInputRef.current?.click();
+                          setShowAttachmentMenu(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 hover:bg-slate-800 text-xs text-slate-300 hover:text-white rounded-lg transition flex items-center gap-2 cursor-pointer"
+                      >
+                        🖼️ Fotoğraflardan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          fileInputRef.current?.click();
+                          setShowAttachmentMenu(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 hover:bg-slate-800 text-xs text-slate-300 hover:text-white rounded-lg transition flex items-center gap-2 cursor-pointer"
+                      >
+                        📂 Dosyalardan
+                      </button>
+                    </div>
+                  )}
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-200 transition"
+                    onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-200 transition cursor-pointer"
                     title="Dosya Ekle"
                   >
                     <Paperclip className="w-4 h-4" />
@@ -1392,6 +1612,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 code: 'NONE',
                 description: 'Veritabanı bağlantısı yok.',
                 channels: [],
+                createdAt: '2026-07-22T12:00:00.000Z',
               }
             }
           />
@@ -1407,6 +1628,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 code: 'NONE',
                 description: 'Veritabanı bağlantısı yok.',
                 channels: [],
+                createdAt: '2026-07-22T12:00:00.000Z',
               }
             }
           />
@@ -1422,6 +1644,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 code: 'NONE',
                 description: 'Veritabanı bağlantısı yok.',
                 channels: [],
+                createdAt: '2026-07-22T12:00:00.000Z',
               }
             }
           />
@@ -1471,6 +1694,20 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           onSuccess={loadProjects}
         />
       )}
+      <input
+        type="file"
+        ref={photoInputRef}
+        onChange={(e) => handleAttachmentUpload(e.target.files?.[0], 'photo')}
+        accept="image/*"
+        className="hidden"
+      />
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={(e) => handleAttachmentUpload(e.target.files?.[0], 'file')}
+        accept="*/*"
+        className="hidden"
+      />
     </div>
   );
 }

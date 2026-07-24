@@ -163,4 +163,12 @@ export class MessagesService {
       take: limit,
     });
   }
+
+  async clearChannelMessages(channelId: string) {
+    const deleted = await this.prisma.message.deleteMany({
+      where: { channelId },
+    });
+    this.chatGateway.server.to(channelId).emit('chatCleared', { channelId });
+    return deleted;
+  }
 }

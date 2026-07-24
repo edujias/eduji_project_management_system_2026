@@ -49,6 +49,9 @@ export function CreateChannelModal({ project, onClose, onSuccess }: CreateChanne
         name: formattedName,
         projectId: project.id,
         description: finalDescription,
+        type: 'PROJECT_PUBLIC' as const,
+        createdById: 'mock-admin-id',
+        createdAt: new Date().toISOString(),
       };
 
       const existingRaw = localStorage.getItem('offline_projects');

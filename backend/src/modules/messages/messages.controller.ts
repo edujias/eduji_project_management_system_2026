@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { SendMessageDto } from './dto/message.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
@@ -23,5 +23,10 @@ export class MessagesController {
     @Query('limit') limit?: number,
   ) {
     return this.messagesService.getChannelMessages(channelId, limit ? Number(limit) : 50);
+  }
+
+  @Delete('channel/:channelId')
+  async clearChannelMessages(@Param('channelId') channelId: string) {
+    return this.messagesService.clearChannelMessages(channelId);
   }
 }

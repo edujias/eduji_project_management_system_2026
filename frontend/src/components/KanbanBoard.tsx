@@ -112,6 +112,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
         dueDate: taskDueDate ? new Date(taskDueDate).toISOString() : null,
         projectId: project.id,
         createdAt: new Date().toISOString(),
+        createdById: 'mock-admin-id',
       };
       
       const updatedList = [mockTask, ...tasks];
@@ -182,7 +183,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
       saveTasksLocally(updatedList);
     } catch (err: any) {
       console.warn('Backend çevrimdışı, durum güncellemesi yerel olarak yapılıyor:', err);
-      const updatedList = tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t));
+      const updatedList = tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } as Task : t));
       setTasks(updatedList);
       saveTasksLocally(updatedList);
     }
@@ -223,6 +224,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
           status: 'TODO',
           projectId: project.id,
           createdAt: new Date().toISOString(),
+          createdById: 'mock-admin-id',
         },
         {
           id: `offline-ai-${Math.random()}`,
@@ -232,6 +234,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
           status: 'IN_PROGRESS',
           projectId: project.id,
           createdAt: new Date().toISOString(),
+          createdById: 'mock-admin-id',
         },
         {
           id: `offline-ai-${Math.random()}`,
@@ -241,6 +244,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
           status: 'TODO',
           projectId: project.id,
           createdAt: new Date().toISOString(),
+          createdById: 'mock-admin-id',
         }
       ];
 

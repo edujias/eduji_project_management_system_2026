@@ -34,6 +34,15 @@ export interface Project {
   tasks?: Task[];
 }
 
+export interface ChannelMember {
+  id: string;
+  channelId: string;
+  userId: string;
+  role: string;
+  joinedAt: string;
+  user?: User;
+}
+
 export interface Channel {
   id: string;
   projectId?: string;
@@ -42,6 +51,7 @@ export interface Channel {
   type: 'PROJECT_PUBLIC' | 'PROJECT_PRIVATE' | 'DIRECT_MESSAGE';
   createdById: string;
   createdAt: string;
+  members?: ChannelMember[];
 }
 
 export interface MessageReaction {
@@ -75,6 +85,7 @@ export interface Task {
   assignedTo?: { id: string; fullName: string; avatarUrl?: string; email?: string };
   createdById: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface FileAsset {
@@ -87,5 +98,5 @@ export interface FileAsset {
   s3Key: string;
   publicUrl?: string;
   createdAt: string;
-  uploadedBy?: { id: string; fullName: string; avatarUrl?: string };
+  uploadedBy?: { id: string; fullName: string; avatarUrl?: string; email?: string };
 }

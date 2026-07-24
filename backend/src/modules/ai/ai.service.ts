@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/database/prisma.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class AiService {
@@ -160,6 +162,108 @@ Lütfen yanıtı Türkçe ve Markdown formatında ver.
     return {
       source: 'Sistem Uyarısı',
       roadmap: `⚠️ **Sistem Uyarısı**: Google Gemini AI API çağrısı başarısız oldu. Lütfen \`backend/.env\` dosyasındaki API anahtarınızın geçerliliğini kontrol edin.`,
+    };
+  }
+
+  async analyzeFileAsset(fileId: string) {
+    const file = await this.prisma.fileAsset.findUnique({
+      where: { id: fileId },
+    });
+    if (!file) throw new NotFoundException('Dosya bulunamadı.');
+
+    const filePath = path.join(process.cwd(), 'uploads', file.s3Key);
+    let contentSnippet = '';
+
+    if (fs.existsSync(filePath)) {
+      try {
+        const ext = path.extname(file.fileName).toLowerCase();
+        const readableExtensions = ['.txt', '.json', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.md', '.log', '.csv', '.xml', '.yml', '.yaml'];
+        if (readableExtensions.includes(ext)) {
+          const fullContent = fs.readFileSync(filePath, 'utf-8');
+          contentSnippet = fullContent.substring(0, 8000);
+        } else {
+          contentSnippet = `[Bu dosya ikili (binary) bir formatta veya önizlenemez bir boyutta: ${file.mimeType || 'Bilinmeyen'} formatı. Dosya adını ve meta verilerini özetleyin.]`;
+        }
+      } catch (err) {
+        console.error('Dosya okuma hatası:', err);
+        contentSnippet = `[Dosya içeriği okunurken bir hata oluştu: ${err.message}]`;
+      }
+    } else {
+      contentSnippet = '[Dosya fiziksel diskte bulunamadı veya henüz yüklenmedi.]';
+    }
+
+    const promptText = `
+Sen bir Proje Yönetim Sistemi Yapay Zeka Denetçisisin.
+Aşağıdaki dosya detaylarını ve içeriğini incele:
+
+DOSYA DETAYLARI:
+- Dosya Adı: ${file.fileName}
+- Boyut: ${(file.fileSize / 1024).toFixed(1)} KB
+- Format: ${file.mimeType || 'Bilinmeyen'}
+- Eklenme Tarihi: ${file.createdAt}
+
+DOSYA İÇERİĞİ:
+"""
+${contentSnippet}
+"""
+
+Lütfen bu dosyayı inceleyip Türkçe bir analiz ve özet raporu hazırla. 
+Rapor şunları içermelidir:
+1. **Dosya Tanımı**: Dosyanın ne işe yaradığı ve genel yapısı.
+2. **Ana Bulgular / Özet**: Dosya içindeki en kritik bilgiler veya kod bloklarının analizi.
+3. **AI Tavsiyeleri**: Dosya kalitesini, verimliliğini, güvenliğini artırmaya yönelik tavsiyelerin.
+
+Yanıtını tamamen Türkçe ve Markdown formatında ver.
+`;
+
+    if (!this.geminiApiKey) {
+      return {
+        summary: `🤖 **Gemini AI Doküman Analiz Raporu (Çevrimdışı Simülasyon)**
+
+📄 **Dosya Adı:** ${file.fileName}
+📊 **Boyut:** ${(file.fileSize / 1024).toFixed(1)} KB
+
+### ⚠️ API Anahtarı Tanımlanmamış:
+\`backend/.env\` dosyasında \`GEMINI_API_KEY\` tanımlanmadığı için canlı Gemini analizi yapılamadı.
+
+### 📌 Çevrimdışı Analiz (Simülasyon):
+1. **Dosya Tanımı**: Bu dosya, projede yer alan **${file.fileName}** isimli bir dokümandır.
+2. **Ana Bulgular**: Boyutu **${(file.fileSize / 1024).toFixed(1)} KB** olup, formatı **${file.mimeType || 'Bilinmeyen'}** olarak kayıtlıdır.
+3. **AI Tavsiyesi**: Canlı ve içerik odaklı analiz gerçekleştirebilmek için lütfen \`GEMINI_API_KEY\` tanımlayıp Docker veritabanını çalıştırın.`
+      };
+    }
+
+    const models = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-flash-latest',
+      'gemini-pro-latest',
+      'gemini-1.5-flash',
+    ];
+    for (const model of models) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: promptText }] }],
+            }),
+          },
+        );
+
+        const data = await response.json();
+        if (response.ok && data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          return { summary: data.candidates[0].content.parts[0].text };
+        }
+      } catch (err) {
+        console.error(`[Gemini AI File Analysis] ${model} Hata:`, err);
+      }
+    }
+
+    return {
+      summary: `⚠️ **Sistem Uyarısı**: Google Gemini AI API çağrısı başarısız oldu. Lütfen \`backend/.env\` dosyasındaki API anahtarınızın geçerliliğini kontrol edin.`,
     };
   }
 }

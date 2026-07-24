@@ -98,11 +98,12 @@ export function FileExplorer({ project }: FileExplorerProps) {
         s3Key: 'mock-s3-key',
         publicUrl: URL.createObjectURL(file), // Generate local URL so file is downloadable/viewable in browser
         createdAt: new Date().toISOString(),
+        projectId: project.id,
+        uploadedById: 'mock-user-id',
         uploadedBy: {
           id: 'mock-user-id',
           email: 'user@company.com',
           fullName: 'Ahmet Yılmaz (Offline)',
-          role: 'ADMIN',
         },
       };
       setFiles((prev) => [mockFile, ...prev]);
@@ -146,21 +147,23 @@ export function FileExplorer({ project }: FileExplorerProps) {
     setAiAnalyzing(file.id);
     setSelectedFileSummary(null);
 
-    setTimeout(() => {
+    try {
+      const data = await apiFetch<{ summary: string }>(`/ai/analyze-file/${file.id}`, {
+        method: 'POST',
+      });
       setSelectedFileSummary({
         fileName: file.fileName,
-        summary: `🤖 **Gemini AI Doküman Analiz Raporu:**
-
-📄 **Dosya Adı:** ${file.fileName}
-📊 **Boyut:** ${(file.fileSize / 1024).toFixed(1)} KB
-
-### 📌 Ana Bulgular ve Özet:
-1. **Gereksinimler:** Proje kapsamında mimari bileşenlerin güvenlik denetimleri ve Socket.io canlı mesajlaşma standartları tanımlanmıştır.
-2. **Ekip Sorumlulukları:** Admin yetki seviyeleri ve çalışan erişim rolleri belgelenmiştir.
-3. **AI Önerisi:** Dokümandaki S3 yükleme kotaları ve token süreleri güncellenmelidir.`,
+        summary: data.summary,
       });
+    } catch (err: any) {
+      console.error('AI analiz hatası:', err);
+      setSelectedFileSummary({
+        fileName: file.fileName,
+        summary: `⚠️ **AI Analiz Hatası**: Dosya analizi yapılırken bir sorun oluştu.\n\nHata detayı: ${err.message || 'Bilinmeyen Hata'}`
+      });
+    } finally {
       setAiAnalyzing(null);
-    }, 1500);
+    }
   };
 
   const handleDeleteFile = async (fileId: string) => {
