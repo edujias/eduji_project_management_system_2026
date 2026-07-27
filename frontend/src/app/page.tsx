@@ -38,6 +38,8 @@ import {
   Activity,
   User as UserIcon,
   Trash2,
+  Menu,
+  X,
 } from 'lucide-react';
 
 const simpleHash = (str: string) => {
@@ -79,6 +81,7 @@ export default function Home() {
 
   // Active Tab State: 'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes' | 'activity'
   const [activeTab, setActiveTab] = useState<'chat' | 'kanban' | 'files' | 'analytics' | 'gantt' | 'notes' | 'activity'>('chat');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Active channel ref for Socket listener closure fix
   const activeChannelRef = useRef<Channel | null>(null);
@@ -756,6 +759,7 @@ export default function Home() {
       // Update the active channel
       setActiveChannel(dmChannel);
       setActiveTab('chat');
+      setIsSidebarOpen(false);
     } catch (err: any) {
       console.error('DM başlatılamadı:', err);
       alert('Doğrudan mesaj başlatılırken bir hata oluştu.');
@@ -1243,9 +1247,17 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
 
   // --- MAIN WORKSPACE UI ---
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-950">
+    <div className="flex h-screen overflow-hidden bg-slate-950 relative">
+      {/* Mobile Sidebar Backdrop Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-xs transition-opacity duration-200"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* 1. LEFT SIDEBAR: PROJECTS & CHANNELS */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col flex-shrink-0">
+      <aside className={`w-64 bg-slate-900 border-r border-slate-800 flex flex-col flex-shrink-0 fixed md:static inset-y-0 left-0 z-50 transform md:transform-none transition-transform duration-250 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         {/* Workspace Title & User Badge */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div>
@@ -1254,25 +1266,37 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
             </h2>
             <div className="flex items-center gap-1.5 mt-1">
               <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              <span className="text-[11px] text-slate-400 font-medium truncate max-w-[130px]">
+              <span className="text-[11px] text-slate-400 font-medium truncate max-w-[120px]">
                 {currentUser.fullName} ({currentUser.role})
               </span>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
-            title="Çıkış Yap"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleLogout}
+              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
+              title="Çıkış Yap"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="md:hidden p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+              title="Kapat"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Settings Button */}
         {activeProject && (
           <div className="p-3 pb-0">
             <button
-              onClick={() => setShowAdminAclModal(true)}
+              onClick={() => {
+                setShowAdminAclModal(true);
+                setIsSidebarOpen(false);
+              }}
               className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2.5 transition bg-indigo-600 text-white border border-indigo-500 shadow-sm cursor-pointer hover:bg-indigo-800 hover:border-indigo-600"
               title="Ayarlar"
             >
@@ -1290,7 +1314,10 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
             </span>
             {currentUser.role === 'ADMIN' && (
               <button
-                onClick={() => setShowCreateProjectModal(true)}
+                onClick={() => {
+                  setShowCreateProjectModal(true);
+                  setIsSidebarOpen(false);
+                }}
                 className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded transition"
                 title="Yeni Proje Ekle"
               >
@@ -1310,6 +1337,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                     if (proj.channels && proj.channels.length > 0) {
                       setActiveChannel(proj.channels[0]);
                     }
+                    setIsSidebarOpen(false);
                   }}
                   className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition ${
                     isSelected
@@ -1334,7 +1362,10 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           </span>
 
           <button
-            onClick={() => setActiveTab('chat')}
+            onClick={() => {
+              setActiveTab('chat');
+              setIsSidebarOpen(false);
+            }}
             className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
               activeTab === 'chat'
                 ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
@@ -1345,7 +1376,10 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           </button>
 
           <button
-            onClick={() => setActiveTab('kanban')}
+            onClick={() => {
+              setActiveTab('kanban');
+              setIsSidebarOpen(false);
+            }}
             className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
               activeTab === 'kanban'
                 ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
@@ -1356,7 +1390,10 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           </button>
 
           <button
-            onClick={() => setActiveTab('gantt')}
+            onClick={() => {
+              setActiveTab('gantt');
+              setIsSidebarOpen(false);
+            }}
             className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
               activeTab === 'gantt'
                 ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
@@ -1367,7 +1404,10 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           </button>
 
           <button
-            onClick={() => setActiveTab('files')}
+            onClick={() => {
+              setActiveTab('files');
+              setIsSidebarOpen(false);
+            }}
             className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
               activeTab === 'files'
                 ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
@@ -1378,7 +1418,10 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
           </button>
 
           <button
-            onClick={() => setActiveTab('notes')}
+            onClick={() => {
+              setActiveTab('notes');
+              setIsSidebarOpen(false);
+            }}
             className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
               activeTab === 'notes'
                 ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
@@ -1390,7 +1433,10 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
 
           {currentUser.role === 'ADMIN' && (
             <button
-              onClick={() => setActiveTab('activity')}
+              onClick={() => {
+                setActiveTab('activity');
+                setIsSidebarOpen(false);
+              }}
               className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition ${
                 activeTab === 'activity'
                   ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
@@ -1438,7 +1484,10 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                     return (
                       <button
                         key={chan.id}
-                        onClick={() => setActiveChannel(chan)}
+                        onClick={() => {
+                          setActiveChannel(chan);
+                          setIsSidebarOpen(false);
+                        }}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition ${
                           isChanSelected
                             ? 'bg-indigo-600 text-white font-bold border border-indigo-500 shadow-sm'
@@ -1517,6 +1566,13 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
         {/* Top Header */}
         <header className="h-14 border-b border-slate-800 px-6 flex items-center justify-between bg-slate-900/60 backdrop-blur relative z-30">
           <div className="flex items-center gap-3 min-w-0 flex-1">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition mr-1 flex-shrink-0 cursor-pointer"
+              title="Menüyü Aç"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <div className="p-2 bg-slate-800 rounded-lg text-indigo-400 border border-slate-700">
               {activeTab === 'chat' && (
                 activeChannel?.type === 'DIRECT_MESSAGE'

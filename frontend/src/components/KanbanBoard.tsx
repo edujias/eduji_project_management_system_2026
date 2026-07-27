@@ -309,7 +309,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
       </div>
 
       {/* Kanban Columns Stream */}
-      <div className="flex-1 grid grid-cols-4 gap-4 overflow-hidden">
+      <div className="flex-1 overflow-x-auto flex gap-4 min-w-0 pr-2 pb-2">
         {columns.map((col) => {
           const colTasks = tasks.filter((t) => t.status === col.id);
           return (
@@ -325,7 +325,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
                 }
                 setDraggedOverColId(null);
               }}
-              className={`rounded-2xl border p-4 flex flex-col ${col.bg} backdrop-blur min-h-0 transition-all duration-200 ${
+              className={`rounded-2xl border p-4 flex flex-col ${col.bg} backdrop-blur min-h-0 transition-all duration-200 w-72 md:w-auto md:flex-1 flex-shrink-0 ${
                 draggedOverColId === col.id ? 'ring-2 ring-indigo-500/40 bg-indigo-950/20 scale-[1.01]' : ''
               }`}
             >
