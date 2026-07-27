@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from 'src/database/prisma.service';
 import { SystemRole, ProjectPermissionLevel } from 'src/common/enums';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private prisma: PrismaService) {}
 
   async createProject(dto: { name: string; code: string; description?: string }, creatorId: string) {
     const existing = await this.prisma.project.findUnique({

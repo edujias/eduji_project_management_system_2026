@@ -2,8 +2,14 @@
   "name": "eduji-project-management-system",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "tests"
+  ],
   "scripts": {
-    "install:all": "npm --prefix frontend install && npm --prefix backend install",
+    "postinstall": "find node_modules -name \"*.map\" -delete && rm -f node_modules/prisma/libquery_engine-darwin-arm64.dylib.node node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node 2>/dev/null || true",
+    "install:all": "npm install",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run start:dev",
     "dev": "npm --prefix frontend run dev"

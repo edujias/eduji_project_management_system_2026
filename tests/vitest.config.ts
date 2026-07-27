@@ -8,11 +8,12 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './vitest.setup.ts',
-    include: ['frontend/**/*.spec.ts', 'frontend/**/*.spec.tsx'],
+    include: ['frontend/**/*.spec.ts', 'frontend/**/*.spec.tsx', 'backend/**/*.spec.ts'],
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '../frontend/src'),
+      'src': path.resolve(__dirname, '../backend/src'),
     },
   },
 });

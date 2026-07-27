@@ -10,7 +10,7 @@
     "sourceMap": true,
     "baseUrl": ".",
     "skipLibCheck": true,
-    "types": ["node", "jest"],
+    "types": ["node", "vitest/globals"],
     "strictNullChecks": false,
     "noImplicitAny": false,
     "strictBindCallApply": false,
