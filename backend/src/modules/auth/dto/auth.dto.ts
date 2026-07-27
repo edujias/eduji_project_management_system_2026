@@ -20,3 +20,20 @@ export class LoginDto {
   @IsNotEmpty({ message: 'Şifre alanı boş bırakılamaz.' })
   password: string;
 }
+
+export class ForgotPasswordDto {
+  @IsEmail({}, { message: 'Geçerli bir e-posta adresi giriniz.' })
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsEmail({}, { message: 'Geçerli bir e-posta adresi giriniz.' })
+  email: string;
+
+  @IsNotEmpty({ message: 'Doğrulama kodu boş bırakılamaz.' })
+  code: string;
+
+  @IsNotEmpty({ message: 'Şifre alanı boş bırakılamaz.' })
+  @MinLength(6, { message: 'Şifre en az 6 karakter olmalıdır.' })
+  password: string;
+}

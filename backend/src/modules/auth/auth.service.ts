@@ -1,15 +1,17 @@
-import { Inject, Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/database/prisma.service';
 import * as bcrypt from 'bcryptjs';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
 import { SystemRole } from 'src/common/enums';
+import { MailService } from './mail.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     @Inject(PrismaService) private prisma: PrismaService,
     @Inject(JwtService) private jwtService: JwtService,
+    private mailService: MailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -86,5 +88,62 @@ export class AuthService {
       email,
       role,
     });
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Bu e-posta adresiyle kayıtlı kullanıcı bulunamadı.');
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date();
+    expires.setMinutes(expires.getMinutes() + 15);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken: code,
+        resetTokenExpires: expires,
+      },
+    });
+
+    await this.mailService.sendPasswordResetMail(user.email, code);
+
+    return { message: 'Şifre sıfırlama kodu e-posta adresinize gönderildi.' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Kullanıcı bulunamadı.');
+    }
+
+    if (!user.resetToken || user.resetToken !== dto.code) {
+      throw new BadRequestException('Geçersiz doğrulama kodu.');
+    }
+
+    if (!user.resetTokenExpires || user.resetTokenExpires < new Date()) {
+      throw new BadRequestException('Doğrulama kodunun süresi dolmuş.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        resetToken: null,
+        resetTokenExpires: null,
+      },
+    });
+
+    return { message: 'Şifreniz başarıyla güncellendi.' };
   }
 }

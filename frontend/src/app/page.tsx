@@ -58,8 +58,10 @@ export default function Home() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [resetCode, setResetCode] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'admin'>('login');
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'admin' | 'forgot-password' | 'reset-password'>('login');
   const [devOfflineUsers, setDevOfflineUsers] = useState<{email: string, fullName: string, role: string}[]>([]);
 
   // App Data
@@ -643,6 +645,97 @@ export default function Home() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccess(null);
+
+    try {
+      await apiFetch<{ message: string }>('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+
+      setAuthSuccess('Doğrulama kodu e-posta adresinize gönderildi.');
+      setAuthMode('reset-password');
+    } catch (err: any) {
+      if (err && !err.isNetworkError) {
+        setAuthError(err.message || 'Kod gönderilemedi.');
+        return;
+      }
+
+      console.warn('Backend connection failed. Simulating forgot password flow offline:', err);
+
+      const offlineUsersRaw = localStorage.getItem('offline_users');
+      const offlineUsers = offlineUsersRaw ? JSON.parse(offlineUsersRaw) : [];
+      const targetUser = offlineUsers.find((u: any) => u.email.toLowerCase() === email.trim().toLowerCase());
+
+      if (!targetUser) {
+        setAuthError('Bu e-posta adresiyle kayıtlı kullanıcı bulunamadı (Çevrimdışı mod).');
+        return;
+      }
+
+      const offlineCode = '123456';
+      localStorage.setItem(`offline_reset_code_${email.trim().toLowerCase()}`, offlineCode);
+
+      alert(`[ÇEVRİMDİŞİ SİMÜLASYON]\n\nŞifre sıfırlama kodunuz: ${offlineCode}\nLütfen doğrulama ekranında bu kodu kullanın.`);
+      setAuthSuccess(`[Simülasyon] Doğrulama kodu (${offlineCode}) oluşturuldu.`);
+      setAuthMode('reset-password');
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccess(null);
+
+    try {
+      await apiFetch<{ message: string }>('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ email, code: resetCode, password }),
+      });
+
+      setAuthSuccess('Şifreniz başarıyla değiştirildi. Yeni şifrenizle giriş yapabilirsiniz.');
+      setAuthMode('login');
+      setPassword('');
+      setResetCode('');
+    } catch (err: any) {
+      if (err && !err.isNetworkError) {
+        setAuthError(err.message || 'Şifre değiştirilemedi.');
+        return;
+      }
+
+      console.warn('Backend connection failed. Simulating password reset flow offline:', err);
+
+      const storedCode = localStorage.getItem(`offline_reset_code_${email.trim().toLowerCase()}`);
+      if (!storedCode || storedCode !== resetCode) {
+        setAuthError('Geçersiz doğrulama kodu (Çevrimdışı mod).');
+        return;
+      }
+
+      const offlineUsersRaw = localStorage.getItem('offline_users');
+      let offlineUsers = offlineUsersRaw ? JSON.parse(offlineUsersRaw) : [];
+      const userIndex = offlineUsers.findIndex((u: any) => u.email.toLowerCase() === email.trim().toLowerCase());
+
+      if (userIndex === -1) {
+        setAuthError('Kullanıcı bulunamadı (Çevrimdışı mod).');
+        return;
+      }
+
+      offlineUsers[userIndex].passwordHash = simpleHash(password);
+      offlineUsers[userIndex].plainPassword = password;
+      localStorage.setItem('offline_users', JSON.stringify(offlineUsers));
+      setDevOfflineUsers(offlineUsers);
+
+      localStorage.removeItem(`offline_reset_code_${email.trim().toLowerCase()}`);
+
+      setAuthSuccess('Şifreniz başarıyla sıfırlandı (Çevrimdışı mod). Giriş yapabilirsiniz.');
+      setAuthMode('login');
+      setPassword('');
+      setResetCode('');
+    }
+  };
+
   const handleLogout = () => {
     setToken(null);
     setCurrentUser(null);
@@ -858,11 +951,15 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
             {authMode === 'login' && 'Enterprise Workspace'}
             {authMode === 'register' && 'Yeni Çalışan Kaydı'}
             {authMode === 'admin' && 'Yönetici Girişi'}
+            {authMode === 'forgot-password' && 'Şifremi Unuttum'}
+            {authMode === 'reset-password' && 'Şifre Sıfırlama'}
           </h1>
           <p className="text-xs text-center text-slate-400 mb-6">
             {authMode === 'login' && 'Dahili Proje Yönetimi & Anlık Mesajlaşma Platformu'}
             {authMode === 'register' && 'Workspace ekibine katılmak için bilgilerinizi doldurun'}
             {authMode === 'admin' && 'Proje yönetim yetkileri ve sistem paneli erişimi'}
+            {authMode === 'forgot-password' && 'Şifrenizi sıfırlamak için e-posta adresinizi girin'}
+            {authMode === 'reset-password' && 'E-postanıza gönderilen doğrulama kodunu ve yeni şifrenizi girin'}
           </p>
 
           {authError && (
@@ -871,57 +968,141 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
             </div>
           )}
 
-          <form onSubmit={handleLoginOrRegister} className="space-y-4">
-            {authMode === 'register' && (
+          {authSuccess && (
+            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs rounded-lg">
+              {authSuccess}
+            </div>
+          )}
+
+          {(authMode === 'login' || authMode === 'register' || authMode === 'admin') && (
+            <form onSubmit={handleLoginOrRegister} className="space-y-4">
+              {authMode === 'register' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Ad Soyad
+                  </label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                    required
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Ad Soyad
+                  E-posta Adresi
                 </label>
                 <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
                   required
                 />
               </div>
-            )}
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                E-posta Adresi
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
-                required
-              />
-            </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Şifre
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Şifre
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
-                required
-              />
-            </div>
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition shadow-lg shadow-indigo-600/20 cursor-pointer"
+              >
+                {authMode === 'login' && 'Giriş Yap'}
+                {authMode === 'register' && 'Kayıt Ol'}
+                {authMode === 'admin' && 'Yönetici Girişi'}
+              </button>
+            </form>
+          )}
 
-            <button
-              type="submit"
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition shadow-lg shadow-indigo-600/20"
-            >
-              {authMode === 'login' && 'Giriş Yap'}
-              {authMode === 'register' && 'Kayıt Ol'}
-              {authMode === 'admin' && 'Yönetici Girişi'}
-            </button>
-          </form>
+          {authMode === 'forgot-password' && (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  E-posta Adresi
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition shadow-lg shadow-indigo-600/20 cursor-pointer"
+              >
+                Sıfırlama Kodu Gönder
+              </button>
+            </form>
+          )}
+
+          {authMode === 'reset-password' && (
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  E-posta Adresi
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Doğrulama Kodu (6 Haneli)
+                </label>
+                <input
+                  type="text"
+                  value={resetCode}
+                  onChange={(e) => setResetCode(e.target.value)}
+                  placeholder="123456"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-mono tracking-widest text-center font-bold"
+                  maxLength={6}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Yeni Şifre
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition shadow-lg shadow-indigo-600/20 cursor-pointer"
+              >
+                Şifreyi Güncelle
+              </button>
+            </form>
+          )}
 
           {authMode === 'login' && (
             <div className="mt-6 flex flex-col items-center gap-2 text-xs text-slate-400">
@@ -932,22 +1113,36 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                   onClick={() => {
                     setAuthMode('register');
                     setAuthError(null);
+                    setAuthSuccess(null);
                   }}
                   className="text-indigo-400 font-semibold underline hover:text-indigo-300"
                 >
                   Kayıt Ol
                 </button>
               </div>
-              <div>
+              <div className="flex gap-4">
                 <button
                   type="button"
                   onClick={() => {
                     setAuthMode('admin');
                     setAuthError(null);
+                    setAuthSuccess(null);
                   }}
                   className="text-indigo-400 font-semibold underline hover:text-indigo-300 text-[11px]"
                 >
                   Yönetici Girişi
+                </button>
+                <span className="text-slate-600">|</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('forgot-password');
+                    setAuthError(null);
+                    setAuthSuccess(null);
+                  }}
+                  className="text-indigo-400 font-semibold underline hover:text-indigo-300 text-[11px]"
+                >
+                  Şifremi Unuttum
                 </button>
               </div>
             </div>
@@ -961,6 +1156,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 onClick={() => {
                   setAuthMode('login');
                   setAuthError(null);
+                  setAuthSuccess(null);
                 }}
                 className="text-indigo-400 font-semibold underline hover:text-indigo-300"
               >
@@ -977,12 +1173,29 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                   onClick={() => {
                     setAuthMode('login');
                     setAuthError(null);
+                    setAuthSuccess(null);
                   }}
                   className="text-indigo-400 font-semibold underline hover:text-indigo-300"
                 >
                   Çalışan Girişi
                 </button>
               </div>
+            </div>
+          )}
+
+          {(authMode === 'forgot-password' || authMode === 'reset-password') && (
+            <div className="mt-6 text-center text-xs text-slate-400">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('login');
+                  setAuthError(null);
+                  setAuthSuccess(null);
+                }}
+                className="text-indigo-400 font-semibold underline hover:text-indigo-300"
+              >
+                Giriş Ekranına Dön
+              </button>
             </div>
           )}
 
