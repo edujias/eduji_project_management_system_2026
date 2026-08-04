@@ -6,9 +6,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ProjectPermissionLevel, SystemRole } from 'src/common/enums';
-import { PrismaService } from 'src/database/prisma.service';
-import { PROJECT_PERMISSION_KEY } from 'src/common/decorators/require-project-permission.decorator';
+import { ProjectPermissionLevel, SystemRole } from '../../../common/enums';
+import { PrismaService } from '../../../database/prisma.service';
+import { PROJECT_PERMISSION_KEY } from '../../../common/decorators/require-project-permission.decorator';
 
 @Injectable()
 export class ProjectAccessGuard implements CanActivate {

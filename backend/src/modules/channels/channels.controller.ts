@@ -8,7 +8,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { ChannelsService } from './channels.service';
-import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @Controller('channels')
 @UseGuards(JwtAuthGuard)

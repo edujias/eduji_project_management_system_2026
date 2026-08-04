@@ -1,9 +1,9 @@
 import { Inject, Injectable, UnauthorizedException, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaService } from 'src/database/prisma.service';
+import { PrismaService } from '../../database/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { LoginDto, RegisterDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
-import { SystemRole } from 'src/common/enums';
+import { SystemRole } from '../../common/enums';
 import { MailService } from './mail.service';
 
 @Injectable()

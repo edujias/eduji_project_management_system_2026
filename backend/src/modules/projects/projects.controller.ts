@@ -10,13 +10,13 @@ import {
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto, AssignPermissionDto } from './dto/project.dto';
-import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/common/guards/roles.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { ProjectAccessGuard } from './guards/project-access.guard';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { RequireProjectPermission } from 'src/common/decorators/require-project-permission.decorator';
-import { CurrentUser } from 'src/common/decorators/current-user.decorator';
-import { ProjectPermissionLevel, SystemRole } from 'src/common/enums';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RequireProjectPermission } from '../../common/decorators/require-project-permission.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ProjectPermissionLevel, SystemRole } from '../../common/enums';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard, RolesGuard, ProjectAccessGuard)

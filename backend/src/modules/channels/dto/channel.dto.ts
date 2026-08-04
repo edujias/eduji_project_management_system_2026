@@ -1,5 +1,5 @@
 import { IsNotEmpty, IsOptional, IsEnum, IsString } from 'class-validator';
-import { ChannelType } from 'src/common/enums';
+import { ChannelType } from '../../../common/enums';
 
 export class CreateChannelDto {
   @IsNotEmpty({ message: 'Proje ID belirtilmelidir.' })

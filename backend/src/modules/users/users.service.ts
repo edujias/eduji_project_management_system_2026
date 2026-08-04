@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { PrismaService } from 'src/database/prisma.service';
-import { SystemRole } from 'src/common/enums';
+import { PrismaService } from '../../database/prisma.service';
+import { SystemRole } from '../../common/enums';
 import { ChatGateway } from '../messages/chat.gateway';
 
 @Injectable()

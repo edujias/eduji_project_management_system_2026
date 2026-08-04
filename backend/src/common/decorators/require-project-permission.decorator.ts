@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { ProjectPermissionLevel } from 'src/common/enums';
+import { ProjectPermissionLevel } from '../enums';
 
 export const PROJECT_PERMISSION_KEY = 'project_permission';
 

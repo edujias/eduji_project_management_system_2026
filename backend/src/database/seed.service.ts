@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import * as bcrypt from 'bcryptjs';
-import { SystemRole, ProjectPermissionLevel } from 'src/common/enums';
+import { SystemRole, ProjectPermissionLevel } from '../common/enums';
 
 @Injectable()
 export class SeedService implements OnModuleInit {

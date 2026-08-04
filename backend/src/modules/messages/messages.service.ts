@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from 'src/database/prisma.service';
+import { PrismaService } from '../../database/prisma.service';
 import { SendMessageDto } from './dto/message.dto';
 import { ChatGateway } from './chat.gateway';
 import { AiService } from '../ai/ai.service';
-import { ProjectPermissionLevel, SystemRole } from 'src/common/enums';
+import { ProjectPermissionLevel, SystemRole } from '../../common/enums';
 
 @Injectable()
 export class MessagesService {

@@ -10,7 +10,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
-import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @Controller('tasks')
 @UseGuards(JwtAuthGuard)

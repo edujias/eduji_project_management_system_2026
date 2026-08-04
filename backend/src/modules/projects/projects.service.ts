@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { PrismaService } from 'src/database/prisma.service';
-import { SystemRole, ProjectPermissionLevel } from 'src/common/enums';
+import { PrismaService } from '../../database/prisma.service';
+import { SystemRole, ProjectPermissionLevel } from '../../common/enums';
 
 @Injectable()
 export class ProjectsService {

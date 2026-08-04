@@ -1,5 +1,5 @@
 import { IsNotEmpty, IsOptional, IsEnum, IsString } from 'class-validator';
-import { ProjectPermissionLevel } from 'src/common/enums';
+import { ProjectPermissionLevel } from '../../../common/enums';
 
 export class CreateProjectDto {
   @IsNotEmpty({ message: 'Proje adı boş olamaz.' })

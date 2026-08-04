@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { PrismaService } from 'src/database/prisma.service';
-import { ChannelType } from 'src/common/enums';
+import { PrismaService } from '../../database/prisma.service';
+import { ChannelType } from '../../common/enums';
 
 @Injectable()
 export class ChannelsService {
