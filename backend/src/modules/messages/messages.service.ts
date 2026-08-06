@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { SendMessageDto } from './dto/message.dto';
-import { ChatGateway } from './chat.gateway';
+import { ChatGateway } from '../realtime/chat.gateway';
 import { AiService } from '../ai/ai.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ProjectPermissionLevel, SystemRole } from '../../common/enums';
 
 @Injectable()
@@ -11,12 +12,13 @@ export class MessagesService {
     private prisma: PrismaService,
     private chatGateway: ChatGateway,
     private aiService: AiService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async sendMessage(dto: SendMessageDto, senderId: string) {
     const channel = await this.prisma.channel.findUnique({
       where: { id: dto.channelId },
-      select: { id: true, projectId: true, type: true },
+      select: { id: true, projectId: true, type: true, name: true },
     });
 
     if (!channel) throw new NotFoundException('Kanal bulunamadı.');
@@ -55,6 +57,11 @@ export class MessagesService {
 
     // Mesajı tüm oda üyelerine canlı yayınla
     this.chatGateway.broadcastMessageToChannel(dto.channelId, message);
+
+    // Kanal/DM üyelerine bildirim gönder
+    this.notificationsService
+      .notifyNewMessage(channel, message, senderId, message.sender.fullName)
+      .catch((err) => console.error('Bildirim gönderilirken hata oluştu:', err));
 
     // GEMINI AI CANLI YANIT TETİKLEYİCİSİ
     this.handleGeminiAutoReply(channel, dto.content, message.sender);

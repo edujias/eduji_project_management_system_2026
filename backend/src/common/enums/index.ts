@@ -19,3 +19,9 @@ export enum AccountStatus {
   INACTIVE = 'INACTIVE',
   SUSPENDED = 'SUSPENDED',
 }
+
+export enum NotificationType {
+  MESSAGE_GROUP = 'MESSAGE_GROUP',
+  MESSAGE_DM = 'MESSAGE_DM',
+  TASK_CREATED = 'TASK_CREATED',
+}

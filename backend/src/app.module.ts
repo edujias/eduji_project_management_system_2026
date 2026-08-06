@@ -10,6 +10,8 @@ import { StorageModule } from './modules/storage/storage.module';
 import { AiModule } from './modules/ai/ai.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { EvaluationsModule } from './modules/evaluations/evaluations.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { EvaluationsModule } from './modules/evaluations/evaluations.module';
     UsersModule,
     ProjectsModule,
     ChannelsModule,
+    RealtimeModule,
+    NotificationsModule,
     MessagesModule,
     StorageModule,
     AiModule,

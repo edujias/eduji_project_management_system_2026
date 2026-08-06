@@ -60,6 +60,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.connectedAt = Date.now();
       this.activeUsers.set(client.id, user.id);
 
+      // Kişiye özel yayın (bildirimler gibi) yapabilmek için kullanıcıya özel bir odaya katılır
+      client.join(user.id);
+
       console.log(`[Socket] Kullanıcı bağlandı: ${user.fullName} (${client.id})`);
 
       // İlk bağlantı ise (yani başka bir sekmeden bağlı değilse) online yap
@@ -168,5 +171,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Mesaj oluştuğunda o kanala bağlı olan herkese canlı yayın yapar
   broadcastMessageToChannel(channelId: string, message: any) {
     this.server.to(channelId).emit('newMessage', message);
+  }
+
+  // Belirli bir kullanıcıya (kanal bağımsız) canlı yayın yapar — bildirimler için kullanılır
+  emitToUser(userId: string, event: string, payload: any) {
+    this.server.to(userId).emit(event, payload);
   }
 }

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { SystemRole } from '../../common/enums';
-import { ChatGateway } from '../messages/chat.gateway';
+import { ChatGateway } from '../realtime/chat.gateway';
 
 @Injectable()
 export class UsersService implements OnModuleInit {

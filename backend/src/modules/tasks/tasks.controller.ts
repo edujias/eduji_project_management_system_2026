@@ -28,7 +28,7 @@ export class TasksController {
     @Body() body: any,
     @Request() req: any,
   ) {
-    return this.tasksService.createTask(projectId, body, req.user.id);
+    return this.tasksService.createTask(projectId, body, req.user.id, req.user.fullName);
   }
 
   @Patch(':taskId/status')

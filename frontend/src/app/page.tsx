@@ -11,7 +11,7 @@ import { GeminiRoadmapModal } from '@/components/GeminiRoadmapModal';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { FileExplorer } from '@/components/FileExplorer';
 import { GanttView } from '@/components/GanttView';
-import { NotificationCenter } from '@/components/NotificationCenter';
+import { NotificationCenter, NotificationItem } from '@/components/NotificationCenter';
 import { PersonalNotes } from '@/components/PersonalNotes';
 import { UserActivityPanel } from '@/components/UserActivityPanel';
 import {
@@ -98,6 +98,9 @@ export default function Home() {
 
   const [kanbanRefreshKey, setKanbanRefreshKey] = useState(0);
 
+  // Bildirimler
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
   // Socket
   const { socket, isConnected, joinChannel, leaveChannel } = useSocket(token);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -162,6 +165,7 @@ export default function Home() {
     if (token) {
       loadProjects();
       loadUsers();
+      loadNotifications();
     }
   }, [token]);
 
@@ -193,6 +197,20 @@ export default function Home() {
     socket.on('newMessage', handleNewMessage);
     return () => {
       socket.off('newMessage', handleNewMessage);
+    };
+  }, [socket]);
+
+  // Socket.io Canlı Bildirim Dinleyicisi
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNotification = (notification: NotificationItem) => {
+      setNotifications((prev) => [notification, ...prev]);
+    };
+
+    socket.on('notification', handleNotification);
+    return () => {
+      socket.off('notification', handleNotification);
     };
   }, [socket]);
 
@@ -414,6 +432,57 @@ export default function Home() {
         isOnline: true,
         createdAt: new Date().toISOString(),
       })));
+    }
+  };
+
+  const loadNotifications = async () => {
+    try {
+      const data = await apiFetch<NotificationItem[]>('/notifications');
+      setNotifications(data);
+    } catch (err) {
+      console.error('Bildirimler yüklenemedi:', err);
+    }
+  };
+
+  const markNotificationRead = async (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    try {
+      await apiFetch(`/notifications/${id}/read`, { method: 'PATCH' });
+    } catch (err) {
+      console.error('Bildirim okundu işaretlenemedi:', err);
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    try {
+      await apiFetch('/notifications/read-all', { method: 'PATCH' });
+    } catch (err) {
+      console.error('Bildirimler okundu işaretlenemedi:', err);
+    }
+  };
+
+  const handleNotificationClick = async (item: NotificationItem) => {
+    markNotificationRead(item.id);
+
+    if (item.entityType === 'channel' && item.entityId) {
+      try {
+        const channel = await apiFetch<Channel>(`/channels/${item.entityId}`);
+        if (channel.projectId) {
+          const proj = projects.find((p) => p.id === channel.projectId);
+          if (proj) setActiveProject(proj);
+        }
+        setActiveChannel(channel);
+        setActiveTab('chat');
+      } catch (err) {
+        console.error('Bildirimden kanala gidilemedi:', err);
+      }
+    } else if (item.entityType === 'project' && item.entityId) {
+      const proj = projects.find((p) => p.id === item.entityId);
+      if (proj) {
+        setActiveProject(proj);
+        setActiveTab('kanban');
+      }
     }
   };
 
@@ -1619,7 +1688,11 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
 
           <div className="flex items-center gap-3">
             {/* Notification Center */}
-            <NotificationCenter />
+            <NotificationCenter
+              notifications={notifications}
+              onMarkAllRead={markAllNotificationsRead}
+              onItemClick={handleNotificationClick}
+            />
 
             {/* Clear Chat Button */}
             {activeTab === 'chat' && activeChannel && (

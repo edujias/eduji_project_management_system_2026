@@ -39,6 +39,8 @@ model User {
 
   receivedEvaluations DailyEvaluation[] @relation("UserEvaluations")
   givenEvaluations    DailyEvaluation[] @relation("EvaluatorEvaluations")
+
+  notifications Notification[]
 }
 
 model Project {
@@ -179,4 +181,21 @@ model DailyEvaluation {
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId, date])
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  actorId    String?
+  type       String
+  title      String
+  body       String
+  entityType String?
+  entityId   String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
 }

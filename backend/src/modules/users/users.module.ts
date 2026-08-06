@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
-import { MessagesModule } from '../messages/messages.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 
 @Module({
-  imports: [MessagesModule],
+  imports: [RealtimeModule],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService],

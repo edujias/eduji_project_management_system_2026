@@ -1,12 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { AiService } from '../ai/ai.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class TasksService {
   constructor(
     private prisma: PrismaService,
     private aiService: AiService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async getProjectTasks(projectId: string) {
@@ -20,8 +22,8 @@ export class TasksService {
     });
   }
 
-  async createTask(projectId: string, data: any, creatorId: string) {
-    return this.prisma.task.create({
+  async createTask(projectId: string, data: any, creatorId: string, creatorName: string) {
+    const task = await this.prisma.task.create({
       data: {
         projectId,
         title: data.title,
@@ -36,6 +38,12 @@ export class TasksService {
         assignedTo: { select: { id: true, fullName: true, avatarUrl: true } },
       },
     });
+
+    this.notificationsService
+      .notifyTaskCreated(projectId, task, creatorId, creatorName)
+      .catch((err) => console.error('Görev bildirimi gönderilirken hata oluştu:', err));
+
+    return task;
   }
 
   async updateTaskStatus(taskId: string, status: string, assignedToId?: string) {
