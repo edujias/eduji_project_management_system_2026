@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Task, Project } from '@/types';
+import { Task, Project, User } from '@/types';
 import { apiFetch } from '@/lib/api';
 import {
   Plus,
@@ -17,9 +17,14 @@ import {
 
 interface KanbanBoardProps {
   project: Project;
+  currentUser: User;
 }
 
-export function KanbanBoard({ project }: KanbanBoardProps) {
+export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
+  const canWrite =
+    currentUser.role === 'ADMIN' ||
+    project.permissions?.some((p) => p.userId === currentUser.id && p.permission === 'WRITE');
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingAi, setGeneratingAi] = useState(false);
@@ -55,6 +60,10 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
       setTasks(data);
       saveTasksLocally(data);
     } catch (err: any) {
+      if (err?.statusCode === 401 || err?.statusCode === 403) {
+        setTasks([]);
+        return;
+      }
       console.error('Görev çekme hatası, yerel veriler yükleniyor:', err);
       const offlineTasksRaw = localStorage.getItem(`offline_tasks_${project.id}`);
       if (offlineTasksRaw) {
@@ -102,6 +111,10 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
       setTaskDueDate('');
       setShowNewTaskModal(false);
     } catch (err: any) {
+      if (err?.statusCode === 401 || err?.statusCode === 403) {
+        alert(err.message || 'Bu projede görev ekleme yetkiniz yok.');
+        return;
+      }
       console.warn('Backend çevrimdışı, görev yerel hafızaya kaydediliyor:', err);
       const mockTask: Task = {
         id: `offline-task-${Math.random()}`,
@@ -156,6 +169,10 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
       saveTasksLocally(updatedList);
       setShowEditTaskModal(false);
     } catch (err: any) {
+      if (err?.statusCode === 401 || err?.statusCode === 403) {
+        alert(err.message || 'Bu görevi düzenleme yetkiniz yok.');
+        return;
+      }
       console.warn('Backend çevrimdışı, görev yerel olarak güncelleniyor:', err);
       const updatedList = tasks.map((t) => (t.id === editingTask.id ? {
         ...t,
@@ -182,6 +199,10 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
       setTasks(updatedList);
       saveTasksLocally(updatedList);
     } catch (err: any) {
+      if (err?.statusCode === 401 || err?.statusCode === 403) {
+        alert(err.message || 'Bu görevin durumunu değiştirme yetkiniz yok.');
+        return;
+      }
       console.warn('Backend çevrimdışı, durum güncellemesi yerel olarak yapılıyor:', err);
       const updatedList = tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } as Task : t));
       setTasks(updatedList);
@@ -196,6 +217,10 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
       setTasks(updatedList);
       saveTasksLocally(updatedList);
     } catch (err: any) {
+      if (err?.statusCode === 401 || err?.statusCode === 403) {
+        alert(err.message || 'Bu görevi silme yetkiniz yok.');
+        return;
+      }
       console.warn('Backend çevrimdışı, görev yerel olarak siliniyor:', err);
       const updatedList = tasks.filter((t) => t.id !== taskId);
       setTasks(updatedList);
@@ -214,6 +239,10 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
       setTasks(updatedList);
       saveTasksLocally(updatedList);
     } catch (err: any) {
+      if (err?.statusCode === 401 || err?.statusCode === 403) {
+        alert(err.message || 'Bu projede AI ile görev üretme yetkiniz yok.');
+        return;
+      }
       console.warn('Backend çevrimdışı, Gemini yapay zeka görevleri yerel olarak üretiliyor:', err);
       const mockAiTasks: Task[] = [
         {
@@ -290,6 +319,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
         </div>
 
         <div className="flex items-center gap-3">
+          {canWrite && (
           <button
             onClick={handleAiGenerateTasks}
             disabled={generatingAi}
@@ -298,13 +328,16 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
             <Sparkles className="w-4 h-4 animate-spin" />
             {generatingAi ? 'Gemini AI Görevleri Üretiyor...' : '🤖 Gemini AI ile Görev Üret'}
           </button>
+          )}
 
+          {canWrite && (
           <button
             onClick={() => setShowNewTaskModal(true)}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition shadow-lg shadow-indigo-600/20 flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" /> Yeni Görev Ekle
           </button>
+          )}
         </div>
       </div>
 
@@ -319,6 +352,10 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
               onDragEnter={() => setDraggedOverColId(col.id)}
               onDragLeave={() => setDraggedOverColId(null)}
               onDrop={(e) => {
+                if (!canWrite) {
+                  setDraggedOverColId(null);
+                  return;
+                }
                 const taskId = e.dataTransfer.getData('text/plain');
                 if (taskId) {
                   handleMoveStatus(taskId, col.id);
@@ -344,17 +381,19 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
                 {colTasks.map((task) => (
                   <div
                     key={task.id}
-                    draggable="true"
+                    draggable={canWrite}
                     onDragStart={(e) => {
+                      if (!canWrite) return;
                       e.dataTransfer.setData('text/plain', task.id);
                       e.dataTransfer.effectAllowed = 'move';
                     }}
-                    className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-4 rounded-xl shadow-md transition group space-y-2.5 cursor-grab active:cursor-grabbing hover:shadow-lg hover:shadow-slate-950/50"
+                    className={`bg-slate-900 border border-slate-800 hover:border-slate-700 p-4 rounded-xl shadow-md transition group space-y-2.5 hover:shadow-lg hover:shadow-slate-950/50 ${canWrite ? 'cursor-grab active:cursor-grabbing' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h4 className="font-semibold text-xs text-slate-100 leading-snug">
                         {task.title}
                       </h4>
+                      {canWrite && (
                       <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
                         <button
                           onClick={() => {
@@ -378,6 +417,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
+                      )}
                     </div>
 
                     {task.description && (
@@ -407,6 +447,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
                     </div>
 
                     {/* Move Status Action Bar */}
+                    {canWrite && (
                     <div className="flex items-center gap-1 pt-1 opacity-80 group-hover:opacity-100 transition">
                       <span className="text-[10px] text-slate-500 mr-1">Taşı:</span>
                       {columns
@@ -421,6 +462,7 @@ export function KanbanBoard({ project }: KanbanBoardProps) {
                           </button>
                         ))}
                     </div>
+                    )}
                   </div>
                 ))}
 

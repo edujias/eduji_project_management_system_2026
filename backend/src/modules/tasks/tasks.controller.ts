@@ -11,6 +11,9 @@ import {
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { ProjectAccessGuard } from '../projects/guards/project-access.guard';
+import { RequireProjectPermission } from '../../common/decorators/require-project-permission.decorator';
+import { ProjectPermissionLevel } from '../../common/enums';
 
 @Controller('tasks')
 @UseGuards(JwtAuthGuard)
@@ -18,11 +21,15 @@ export class TasksController {
   constructor(private tasksService: TasksService) {}
 
   @Get('project/:projectId')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.READ)
   async getProjectTasks(@Param('projectId') projectId: string) {
     return this.tasksService.getProjectTasks(projectId);
   }
 
   @Post('project/:projectId')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.WRITE)
   async createTask(
     @Param('projectId') projectId: string,
     @Body() body: any,
@@ -32,6 +39,8 @@ export class TasksController {
   }
 
   @Patch(':taskId/status')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.WRITE)
   async updateStatus(
     @Param('taskId') taskId: string,
     @Body() body: { status: string; assignedToId?: string },
@@ -40,6 +49,8 @@ export class TasksController {
   }
 
   @Patch(':taskId')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.WRITE)
   async updateTask(
     @Param('taskId') taskId: string,
     @Body() body: any,
@@ -48,11 +59,15 @@ export class TasksController {
   }
 
   @Delete(':taskId')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.WRITE)
   async deleteTask(@Param('taskId') taskId: string) {
     return this.tasksService.deleteTask(taskId);
   }
 
   @Post('project/:projectId/ai-generate')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.WRITE)
   async generateAiTasks(
     @Param('projectId') projectId: string,
     @Request() req: any,

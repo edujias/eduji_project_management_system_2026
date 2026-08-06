@@ -3,9 +3,10 @@ import { TasksService } from './tasks.service';
 import { TasksController } from './tasks.controller';
 import { AiModule } from '../ai/ai.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ProjectsModule } from '../projects/projects.module';
 
 @Module({
-  imports: [AiModule, NotificationsModule],
+  imports: [AiModule, NotificationsModule, ProjectsModule],
   controllers: [TasksController],
   providers: [TasksService],
   exports: [TasksService],

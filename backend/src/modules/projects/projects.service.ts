@@ -1,10 +1,14 @@
 import { Inject, Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { ChatGateway } from '../realtime/chat.gateway';
 import { SystemRole, ProjectPermissionLevel } from '../../common/enums';
 
 @Injectable()
 export class ProjectsService {
-  constructor(@Inject(PrismaService) private prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private prisma: PrismaService,
+    private chatGateway: ChatGateway,
+  ) {}
 
   async createProject(dto: { name: string; code: string; description?: string }, creatorId: string) {
     const existing = await this.prisma.project.findUnique({
@@ -130,7 +134,7 @@ export class ProjectsService {
   }
 
   async removePermission(projectId: string, userId: string) {
-    return this.prisma.projectPermission.delete({
+    const result = await this.prisma.projectPermission.delete({
       where: {
         userId_projectId: {
           userId,
@@ -138,6 +142,10 @@ export class ProjectsService {
         },
       },
     });
+
+    this.chatGateway.emitToUser(userId, 'projectAccessRevoked', { projectId });
+
+    return result;
   }
 
   async updateProject(projectId: string, dto: { name: string; description?: string }) {

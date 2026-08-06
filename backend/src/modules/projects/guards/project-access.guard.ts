@@ -93,6 +93,15 @@ export class ProjectAccessGuard implements CanActivate {
       return channel?.projectId || null;
     }
 
+    const taskId = request.params?.taskId;
+    if (taskId) {
+      const task = await this.prisma.task.findUnique({
+        where: { id: taskId },
+        select: { projectId: true },
+      });
+      return task?.projectId || null;
+    }
+
     return null;
   }
 }

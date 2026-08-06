@@ -40,6 +40,7 @@ import {
   Trash2,
   Menu,
   X,
+  ShieldOff,
 } from 'lucide-react';
 
 const simpleHash = (str: string) => {
@@ -86,6 +87,11 @@ export default function Home() {
   // Active channel ref for Socket listener closure fix
   const activeChannelRef = useRef<Channel | null>(null);
   activeChannelRef.current = activeChannel;
+
+  const activeProjectRef = useRef<Project | null>(null);
+  activeProjectRef.current = activeProject;
+
+  const [accessRevokedNotice, setAccessRevokedNotice] = useState(false);
 
   // Modals
   const [showAdminAclModal, setShowAdminAclModal] = useState(false);
@@ -211,6 +217,23 @@ export default function Home() {
     socket.on('notification', handleNotification);
     return () => {
       socket.off('notification', handleNotification);
+    };
+  }, [socket]);
+
+  // Socket.io Canlı Proje Erişimi Kaldırıldı Dinleyicisi
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleAccessRevoked = (data: { projectId: string }) => {
+      if (activeProjectRef.current?.id === data.projectId) {
+        setAccessRevokedNotice(true);
+      }
+      loadProjects();
+    };
+
+    socket.on('projectAccessRevoked', handleAccessRevoked);
+    return () => {
+      socket.off('projectAccessRevoked', handleAccessRevoked);
     };
   }, [socket]);
 
@@ -1945,7 +1968,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
         )}
 
         {/* TAB 2: KANBAN TASK BOARD */}
-        {activeTab === 'kanban' && (
+        {activeTab === 'kanban' && currentUser && (
           <KanbanBoard
             project={
               activeProject || {
@@ -1957,6 +1980,7 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
                 createdAt: '2026-07-22T12:00:00.000Z',
               }
             }
+            currentUser={currentUser}
           />
         )}
 
@@ -2004,6 +2028,31 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
       </main>
 
       {/* MODALS */}
+      {accessRevokedNotice && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+              <ShieldOff className="w-6 h-6 text-rose-400" />
+            </div>
+            <h3 className="text-base font-bold text-white">Erişiminiz Kaldırıldı</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Bu projeden çıkarıldınız. Artık bu projenin kanallarına ve görevlerine erişiminiz yok.
+            </p>
+            <button
+              onClick={() => {
+                setAccessRevokedNotice(false);
+                setActiveProject(null);
+                setActiveChannel(null);
+                setActiveTab('chat');
+              }}
+              className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-indigo-600/20"
+            >
+              Ana Sayfaya Dön
+            </button>
+          </div>
+        </div>
+      )}
+
       {showAdminAclModal && activeProject && currentUser && (
         <AdminAclModal
           projects={projects}
