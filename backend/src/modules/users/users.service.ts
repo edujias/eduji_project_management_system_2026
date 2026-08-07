@@ -96,6 +96,11 @@ export class UsersService implements OnModuleInit {
     });
 
     this.chatGateway.server.emit('userStatusChanged', updatedUser);
+
+    if (status !== 'ACTIVE') {
+      this.chatGateway.disconnectUser(id);
+    }
+
     return updatedUser;
   }
 

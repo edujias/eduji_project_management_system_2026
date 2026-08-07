@@ -48,10 +48,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
-        select: { id: true, fullName: true, role: true },
+        select: { id: true, fullName: true, role: true, status: true },
       });
 
-      if (!user) {
+      if (!user || user.status !== 'ACTIVE') {
         client.disconnect();
         return;
       }
@@ -176,5 +176,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Belirli bir kullanıcıya (kanal bağımsız) canlı yayın yapar — bildirimler için kullanılır
   emitToUser(userId: string, event: string, payload: any) {
     this.server.to(userId).emit(event, payload);
+  }
+
+  // Bir kullanıcının açık tüm socket bağlantılarını zorla kapatır (örn. hesap pasife alındığında).
+  // handleDisconnect kendiliğinden tetiklenir; isOnline/lastLogoutAt orada güncellenir.
+  disconnectUser(userId: string) {
+    for (const [socketId, uid] of this.activeUsers.entries()) {
+      if (uid === userId) {
+        this.server.sockets.sockets.get(socketId)?.disconnect(true);
+      }
+    }
   }
 }

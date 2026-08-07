@@ -304,6 +304,20 @@ export default function Home() {
         }
       }
 
+      // Ekip üyeleri listesindeki (sol kenar çubuğu) çevrimiçi/pasiflik durumunu güncelle
+      setUsers((prevUsers) =>
+        prevUsers.map((u) =>
+          u.id === updatedUser.id
+            ? {
+                ...u,
+                isOnline: updatedUser.isOnline,
+                status: updatedUser.status ?? u.status,
+                role: updatedUser.role ?? u.role,
+              }
+            : u
+        )
+      );
+
       // Projeler listesindeki kullanıcının çevrimiçi durumunu güncelle
       setProjects((prevProjects) =>
         prevProjects.map((p) => {
@@ -317,6 +331,7 @@ export default function Home() {
                     user: {
                       ...perm.user,
                       isOnline: updatedUser.isOnline,
+                      status: updatedUser.status ?? perm.user.status,
                     },
                   };
                 }
@@ -340,6 +355,7 @@ export default function Home() {
                   user: {
                     ...perm.user,
                     isOnline: updatedUser.isOnline,
+                    status: updatedUser.status ?? perm.user.status,
                   },
                 };
               }
