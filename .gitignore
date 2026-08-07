@@ -36,3 +36,6 @@ Thumbs.db
 *.db
 *.sqlite
 *.dump
+
+# User-uploaded files (local mock storage, never committed)
+backend/uploads/

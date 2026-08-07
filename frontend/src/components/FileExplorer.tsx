@@ -88,25 +88,8 @@ export function FileExplorer({ project }: FileExplorerProps) {
 
       setFiles((prev) => [newFile, ...prev]);
     } catch (err: any) {
-      console.warn('Backend offline, using local mock file fallback:', err);
-      // Fallback: Create a mock file in local state so the UI functions even when offline!
-      const mockFile: FileAsset = {
-        id: Math.random().toString(),
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type || 'application/octet-stream',
-        s3Key: 'mock-s3-key',
-        publicUrl: URL.createObjectURL(file), // Generate local URL so file is downloadable/viewable in browser
-        createdAt: new Date().toISOString(),
-        projectId: project.id,
-        uploadedById: 'mock-user-id',
-        uploadedBy: {
-          id: 'mock-user-id',
-          email: 'user@company.com',
-          fullName: 'Ahmet Yılmaz (Offline)',
-        },
-      };
-      setFiles((prev) => [mockFile, ...prev]);
+      console.error('Dosya yükleme hatası:', err);
+      alert(err?.message || 'Dosya yüklenemedi. Lütfen tekrar deneyin.');
     }
   };
 

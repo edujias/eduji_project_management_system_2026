@@ -16,10 +16,16 @@ export class StorageService {
       this.configService.get<string>('S3_BUCKET_NAME') || 'enterprise-files';
   }
 
+  private getPublicBaseUrl(): string {
+    const port = this.configService.get<number>('PORT') || 4001;
+    return (
+      this.configService.get<string>('PUBLIC_BACKEND_URL') || `http://localhost:${port}`
+    );
+  }
+
   async generateUploadUrl(dto: { fileName: string; projectId: string }, userId: string) {
     const s3Key = `projects/${dto.projectId}/${Date.now()}_${dto.fileName}`;
-    const port = this.configService.get<number>('PORT') || 4001;
-    const uploadUrl = `http://localhost:${port}/api/storage/mock-upload?s3Key=${s3Key}`;
+    const uploadUrl = `${this.getPublicBaseUrl()}/api/storage/mock-upload?s3Key=${s3Key}`;
 
     return {
       uploadUrl,
@@ -34,8 +40,6 @@ export class StorageService {
     });
     if (!project) throw new NotFoundException('Proje bulunamadı.');
 
-    const port = this.configService.get<number>('PORT') || 4001;
-
     return this.prisma.fileAsset.create({
       data: {
         projectId: data.projectId,
@@ -45,7 +49,7 @@ export class StorageService {
         fileSize: data.fileSize,
         mimeType: data.mimeType,
         s3Key: data.s3Key,
-        publicUrl: `http://localhost:${port}/api/storage/file/${data.s3Key}`,
+        publicUrl: `${this.getPublicBaseUrl()}/api/storage/file/${data.s3Key}`,
       },
     });
   }

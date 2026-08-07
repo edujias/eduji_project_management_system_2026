@@ -602,39 +602,8 @@ export default function Home() {
 
       loadChannelMessages(activeChannel.id);
     } catch (err: any) {
-      console.warn('Backend dosya gönderimi başarısız, çevrimdışı simülasyon moduna geçiliyor:', err);
-      // Fallback local mock message
-      const mockFileId = `offline-file-${Math.random()}`;
-      const mockFile: FileAsset = {
-        id: mockFileId,
-        projectId: activeProject.id,
-        uploadedById: currentUser?.id || 'mock-user-id',
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type || (type === 'photo' ? 'image/png' : 'application/octet-stream'),
-        s3Key: 'mock-s3-key',
-        publicUrl: URL.createObjectURL(file),
-        createdAt: new Date().toISOString(),
-      };
-      
-      const mockMsg: Message = {
-        id: Math.random().toString(),
-        channelId: activeChannel.id,
-        senderId: currentUser?.id || 'mock-user-id',
-        content: type === 'photo' ? `🖼️ Fotoğraf: ${file.name}` : `📂 Dosya: ${file.name}`,
-        createdAt: new Date().toISOString(),
-        sender: currentUser || {
-          id: 'mock-user-id',
-          email: 'user@company.com',
-          fullName: 'Ahmet Yılmaz (Offline)',
-          role: 'ADMIN',
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-        },
-        attachments: [mockFile],
-      };
-      
-      setMessages((prev) => [...prev, mockMsg]);
+      console.error('Dosya gönderimi başarısız:', err);
+      alert(err?.message || 'Dosya gönderilemedi. Lütfen tekrar deneyin.');
     }
   };
 
