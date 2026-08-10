@@ -65,7 +65,6 @@ export default function Home() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'admin' | 'forgot-password' | 'reset-password'>('login');
-  const [devOfflineUsers, setDevOfflineUsers] = useState<{email: string, fullName: string, role: string}[]>([]);
 
   // App Data
   const [projects, setProjects] = useState<Project[]>([]);
@@ -114,7 +113,6 @@ export default function Home() {
   useEffect(() => {
     // Populate default offline users list in localStorage if not already present or needs clean names
     const existing = localStorage.getItem('offline_users');
-    let loadedUsers = [];
     if (!existing || existing.includes('ayse@company.com') || existing.includes('zeyn@company.com') || !existing.includes('mehmet@company.com')) {
       const defaultUsers = [
         {
@@ -143,11 +141,7 @@ export default function Home() {
         }
       ];
       localStorage.setItem('offline_users', JSON.stringify(defaultUsers));
-      loadedUsers = defaultUsers;
-    } else {
-      loadedUsers = JSON.parse(existing);
     }
-    setDevOfflineUsers(loadedUsers);
 
     const savedToken = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
@@ -661,8 +655,7 @@ export default function Home() {
         
         offlineUsers.push(newUser);
         localStorage.setItem('offline_users', JSON.stringify(offlineUsers));
-        setDevOfflineUsers(offlineUsers);
-        
+
         const userSession: User = {
           id: newUser.id,
           email: newUser.email,
@@ -805,7 +798,6 @@ export default function Home() {
       offlineUsers[userIndex].passwordHash = simpleHash(password);
       offlineUsers[userIndex].plainPassword = password;
       localStorage.setItem('offline_users', JSON.stringify(offlineUsers));
-      setDevOfflineUsers(offlineUsers);
 
       localStorage.removeItem(`offline_reset_code_${email.trim().toLowerCase()}`);
 
@@ -1280,43 +1272,6 @@ Eğer benimle canlı konuşmak, kanal özetleri almak veya kod yazdırmak isters
             </div>
           )}
 
-          {/* Developer Mode Helper */}
-          <div className="mt-8 pt-4 border-t border-slate-800/60 text-left">
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-2">
-              <Terminal className="w-3.5 h-3.5" />
-              <span>Geliştirici Modu: Kayıtlı Hesaplar</span>
-            </div>
-            <p className="text-[10px] text-slate-500 mb-2 leading-relaxed">
-              Tıklayarak e-posta ve şifre alanlarını otomatik doldurabilirsiniz:
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {devOfflineUsers.length > 0 ? (
-                devOfflineUsers.map((u) => (
-                  <button
-                    key={u.email}
-                    type="button"
-                    onClick={() => {
-                      setEmail(u.email);
-                      setPassword((u as any).plainPassword || (u.role === 'ADMIN' ? 'admin123' : 'employee123'));
-                      if (u.role === 'ADMIN') {
-                        setAuthMode('admin');
-                      } else {
-                        setAuthMode('login');
-                      }
-                    }}
-                    className="text-[10px] bg-slate-950 hover:bg-slate-800 hover:text-white text-slate-300 px-2 py-1.5 rounded-lg border border-slate-800 transition font-medium flex flex-col items-start min-w-[120px] cursor-pointer"
-                    title="Otomatik Doldur"
-                  >
-                    <span className="font-semibold text-slate-200 truncate max-w-[110px]">{u.fullName}</span>
-                    <span className="text-[9px] text-slate-400 font-mono truncate max-w-[110px]">{u.email}</span>
-                    <span className="text-[8px] mt-0.5 text-indigo-400 font-extrabold uppercase tracking-wider">{u.role}</span>
-                  </button>
-                ))
-              ) : (
-                <span className="text-[10px] text-slate-600">Kayıtlı hesap bulunamadı.</span>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     );
