@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Task, Project, User } from '@/types';
 import { apiFetch } from '@/lib/api';
 import {
@@ -13,6 +13,9 @@ import {
   Trash2,
   UserCheck,
   Pencil,
+  Check,
+  X,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 interface KanbanBoardProps {
@@ -24,6 +27,18 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
   const canWrite =
     currentUser.role === 'ADMIN' ||
     project.permissions?.some((p) => p.userId === currentUser.id && p.permission === 'WRITE');
+
+  // Göreve atanabilecek kullanıcılar: proje üyeleri + (listede yoksa) mevcut kullanıcı
+  const assignableUsers = useMemo(() => {
+    const fromPermissions = (project.permissions || [])
+      .map((p) => p.user)
+      .filter((u): u is User => !!u);
+    const map = new Map(fromPermissions.map((u) => [u.id, u]));
+    if (!map.has(currentUser.id)) {
+      map.set(currentUser.id, currentUser);
+    }
+    return Array.from(map.values());
+  }, [project.permissions, currentUser]);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +52,7 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
   const [editTaskDesc, setEditTaskDesc] = useState('');
   const [editTaskPriority, setEditTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>('MEDIUM');
   const [editTaskDueDate, setEditTaskDueDate] = useState('');
+  const [editTaskAssigneeId, setEditTaskAssigneeId] = useState('');
 
   // New task form state
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
@@ -44,6 +60,11 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
   const [taskDesc, setTaskDesc] = useState('');
   const [taskPriority, setTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>('MEDIUM');
   const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskAssigneeId, setTaskAssigneeId] = useState('');
+
+  // Devretme (delegate) seçici
+  const [delegatingTaskId, setDelegatingTaskId] = useState<string | null>(null);
+  const [delegateToUserId, setDelegateToUserId] = useState('');
 
   useEffect(() => {
     loadTasks();
@@ -99,6 +120,7 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
           priority: taskPriority,
           status: 'TODO',
           dueDate: taskDueDate || null,
+          assignedToId: taskAssigneeId || null,
         }),
       });
 
@@ -109,6 +131,7 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
       setTaskTitle('');
       setTaskDesc('');
       setTaskDueDate('');
+      setTaskAssigneeId('');
       setShowNewTaskModal(false);
     } catch (err: any) {
       if (err?.statusCode === 401 || err?.statusCode === 403) {
@@ -161,6 +184,7 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
           description: editTaskDesc,
           priority: editTaskPriority,
           dueDate: editTaskDueDate || null,
+          assignedToId: editTaskAssigneeId || null,
         }),
       });
 
@@ -207,6 +231,56 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
       const updatedList = tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } as Task : t));
       setTasks(updatedList);
       saveTasksLocally(updatedList);
+    }
+  };
+
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      const updated = await apiFetch<Task>(`/tasks/${taskId}/complete`, { method: 'PATCH' });
+      const updatedList = tasks.map((t) => (t.id === taskId ? updated : t));
+      setTasks(updatedList);
+      saveTasksLocally(updatedList);
+    } catch (err: any) {
+      alert(err?.message || 'Görev tamamlandı olarak işaretlenemedi.');
+    }
+  };
+
+  const handleApproveTask = async (taskId: string) => {
+    try {
+      const updated = await apiFetch<Task>(`/tasks/${taskId}/approve`, { method: 'PATCH' });
+      const updatedList = tasks.map((t) => (t.id === taskId ? updated : t));
+      setTasks(updatedList);
+      saveTasksLocally(updatedList);
+    } catch (err: any) {
+      alert(err?.message || 'Görev onaylanamadı.');
+    }
+  };
+
+  const handleRejectTask = async (taskId: string) => {
+    try {
+      const updated = await apiFetch<Task>(`/tasks/${taskId}/reject`, { method: 'PATCH' });
+      const updatedList = tasks.map((t) => (t.id === taskId ? updated : t));
+      setTasks(updatedList);
+      saveTasksLocally(updatedList);
+    } catch (err: any) {
+      alert(err?.message || 'Görev reddedilemedi.');
+    }
+  };
+
+  const handleDelegateTask = async () => {
+    if (!delegatingTaskId || !delegateToUserId) return;
+    try {
+      const updated = await apiFetch<Task>(`/tasks/${delegatingTaskId}/delegate`, {
+        method: 'PATCH',
+        body: JSON.stringify({ toUserId: delegateToUserId }),
+      });
+      const updatedList = tasks.map((t) => (t.id === delegatingTaskId ? updated : t));
+      setTasks(updatedList);
+      saveTasksLocally(updatedList);
+      setDelegatingTaskId(null);
+      setDelegateToUserId('');
+    } catch (err: any) {
+      alert(err?.message || 'Görev devredilemedi.');
     }
   };
 
@@ -344,7 +418,9 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
       {/* Kanban Columns Stream */}
       <div className="flex-1 overflow-x-auto flex gap-4 min-w-0 pr-2 pb-2">
         {columns.map((col) => {
-          const colTasks = tasks.filter((t) => t.status === col.id);
+          const colTasks = tasks.filter(
+            (t) => t.status === col.id || (col.id === 'IN_PROGRESS' && t.status === 'PENDING_APPROVAL')
+          );
           return (
             <div
               key={col.id}
@@ -378,16 +454,30 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
 
               {/* Tasks List */}
               <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                {colTasks.map((task) => (
+                {colTasks.map((task) => {
+                  const isMovable = canWrite && (task.status === 'TODO' || task.status === 'IN_PROGRESS');
+                  const isCurrentAssignee = task.assignedToId === currentUser.id;
+                  const canComplete =
+                    isCurrentAssignee && (task.status === 'TODO' || task.status === 'IN_PROGRESS');
+                  const isPeerApprover =
+                    task.status === 'PENDING_APPROVAL' && task.assignedById === currentUser.id;
+                  const isAdminReviewer = task.status === 'REVIEW' && currentUser.role === 'ADMIN';
+                  const canReview = isPeerApprover || isAdminReviewer;
+
+                  return (
                   <div
                     key={task.id}
-                    draggable={canWrite}
+                    draggable={isMovable}
                     onDragStart={(e) => {
-                      if (!canWrite) return;
+                      if (!isMovable) return;
                       e.dataTransfer.setData('text/plain', task.id);
                       e.dataTransfer.effectAllowed = 'move';
                     }}
-                    className={`bg-slate-900 border border-slate-800 hover:border-slate-700 p-4 rounded-xl shadow-md transition group space-y-2.5 hover:shadow-lg hover:shadow-slate-950/50 ${canWrite ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                    className={`bg-slate-900 border p-4 rounded-xl shadow-md transition group space-y-2.5 hover:shadow-lg hover:shadow-slate-950/50 ${
+                      task.status === 'PENDING_APPROVAL'
+                        ? 'border-amber-700/60'
+                        : 'border-slate-800 hover:border-slate-700'
+                    } ${isMovable ? 'cursor-grab active:cursor-grabbing' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h4 className="font-semibold text-xs text-slate-100 leading-snug">
@@ -402,6 +492,7 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
                             setEditTaskDesc(task.description || '');
                             setEditTaskPriority(task.priority);
                             setEditTaskDueDate(task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-CA') : '');
+                            setEditTaskAssigneeId(task.assignedToId || '');
                             setShowEditTaskModal(true);
                           }}
                           className="text-slate-500 hover:text-indigo-400 transition cursor-pointer"
@@ -446,12 +537,65 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
                       )}
                     </div>
 
-                    {/* Move Status Action Bar */}
-                    {canWrite && (
+                    {task.status === 'PENDING_APPROVAL' && (
+                      <div className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded">
+                        {isPeerApprover
+                          ? 'Onayınız bekleniyor'
+                          : `${task.assignedBy?.fullName || 'Atayan'} onayı bekleniyor`}
+                      </div>
+                    )}
+                    {task.status === 'REVIEW' && (
+                      <div className="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded">
+                        Yönetici incelemesi bekleniyor
+                      </div>
+                    )}
+
+                    {/* Tamamla / Devret */}
+                    {(canComplete) && (
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <button
+                          onClick={() => handleCompleteTask(task.id)}
+                          className="flex-1 flex items-center justify-center gap-1 text-[10px] px-2 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-600/40 text-emerald-400 rounded-lg font-semibold transition"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Tamamlandı
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDelegatingTaskId(task.id);
+                            setDelegateToUserId('');
+                          }}
+                          className="flex items-center justify-center gap-1 text-[10px] px-2 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg font-medium transition"
+                          title="Başka birine devret"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5" /> Devret
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Onayla / Reddet */}
+                    {canReview && (
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <button
+                          onClick={() => handleApproveTask(task.id)}
+                          className="flex-1 flex items-center justify-center gap-1 text-[10px] px-2 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-600/40 text-emerald-400 rounded-lg font-semibold transition"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Onayla
+                        </button>
+                        <button
+                          onClick={() => handleRejectTask(task.id)}
+                          className="flex-1 flex items-center justify-center gap-1 text-[10px] px-2 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 border border-rose-600/40 text-rose-400 rounded-lg font-semibold transition"
+                        >
+                          <X className="w-3.5 h-3.5" /> Reddet
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Move Status Action Bar: sadece TODO <-> IN_PROGRESS */}
+                    {canWrite && (task.status === 'TODO' || task.status === 'IN_PROGRESS') && (
                     <div className="flex items-center gap-1 pt-1 opacity-80 group-hover:opacity-100 transition">
                       <span className="text-[10px] text-slate-500 mr-1">Taşı:</span>
                       {columns
-                        .filter((c) => c.id !== col.id)
+                        .filter((c) => c.id !== col.id && (c.id === 'TODO' || c.id === 'IN_PROGRESS'))
                         .map((c) => (
                           <button
                             key={c.id}
@@ -464,7 +608,8 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
                     </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
 
                 {colTasks.length === 0 && (
                   <div className="h-24 border border-dashed border-slate-800/80 rounded-xl flex items-center justify-center text-[11px] text-slate-500">
@@ -536,6 +681,24 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
                   <option value="MEDIUM">Orta</option>
                   <option value="HIGH">Yüksek</option>
                   <option value="URGENT">Acil ⚡</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Ata (Opsiyonel)
+                </label>
+                <select
+                  value={taskAssigneeId}
+                  onChange={(e) => setTaskAssigneeId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">Kimseye atama (Genel görev)</option>
+                  {assignableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName}{u.id === currentUser.id ? ' (Ben)' : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -620,6 +783,24 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
                 </select>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Ata (Opsiyonel)
+                </label>
+                <select
+                  value={editTaskAssigneeId}
+                  onChange={(e) => setEditTaskAssigneeId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">Kimseye atama (Genel görev)</option>
+                  {assignableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName}{u.id === currentUser.id ? ' (Ben)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -636,6 +817,52 @@ export function KanbanBoard({ project, currentUser }: KanbanBoardProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DEVRET (DELEGATE) MODAL */}
+      {delegatingTaskId && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-white">Görevi Devret</h3>
+            <p className="text-xs text-slate-400">
+              Bu görevi seçtiğin kişiye devredersin; o kişi tamamladığında onay sırası sana gelir.
+            </p>
+            <select
+              value={delegateToUserId}
+              onChange={(e) => setDelegateToUserId(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+            >
+              <option value="">Kullanıcı seç...</option>
+              {assignableUsers
+                .filter((u) => u.id !== currentUser.id)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.fullName}
+                  </option>
+                ))}
+            </select>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDelegatingTaskId(null);
+                  setDelegateToUserId('');
+                }}
+                className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-medium rounded-lg hover:bg-slate-700"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                disabled={!delegateToUserId}
+                onClick={handleDelegateTask}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg shadow-lg shadow-indigo-600/20"
+              >
+                Devret
+              </button>
+            </div>
           </div>
         </div>
       )}

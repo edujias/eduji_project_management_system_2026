@@ -1,7 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType, SystemRole, TaskStatus } from '../../common/enums';
+
+const TASK_INCLUDE = {
+  assignedTo: { select: { id: true, fullName: true, avatarUrl: true, email: true } },
+  assignedBy: { select: { id: true, fullName: true, avatarUrl: true, role: true } },
+  createdBy: { select: { id: true, fullName: true } },
+};
 
 @Injectable()
 export class TasksService {
@@ -14,10 +21,7 @@ export class TasksService {
   async getProjectTasks(projectId: string) {
     return this.prisma.task.findMany({
       where: { projectId },
-      include: {
-        assignedTo: { select: { id: true, fullName: true, avatarUrl: true, email: true } },
-        createdBy: { select: { id: true, fullName: true } },
-      },
+      include: TASK_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -28,38 +32,50 @@ export class TasksService {
         projectId,
         title: data.title,
         description: data.description,
-        status: data.status || 'TODO',
+        status: data.status || TaskStatus.TODO,
         priority: data.priority || 'MEDIUM',
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
         assignedToId: data.assignedToId || null,
+        assignedById: data.assignedToId ? creatorId : null,
         createdById: creatorId,
       },
-      include: {
-        assignedTo: { select: { id: true, fullName: true, avatarUrl: true } },
-      },
+      include: TASK_INCLUDE,
     });
 
     this.notificationsService
       .notifyTaskCreated(projectId, task, creatorId, creatorName)
       .catch((err) => console.error('Görev bildirimi gönderilirken hata oluştu:', err));
 
+    if (data.assignedToId && data.assignedToId !== creatorId) {
+      this.notifyAssignment(task, creatorName).catch((err) =>
+        console.error('Görev atama bildirimi gönderilirken hata oluştu:', err),
+      );
+    }
+
     return task;
   }
 
-  async updateTaskStatus(taskId: string, status: string, assignedToId?: string) {
+  // Sürükle-bırak / hızlı taşıma: sadece TODO <-> IN_PROGRESS arası, onay zincirini bypass edemez
+  async updateTaskStatus(taskId: string, status: string) {
+    if (status !== TaskStatus.TODO && status !== TaskStatus.IN_PROGRESS) {
+      throw new ForbiddenException(
+        'Bu duruma sadece ilgili onay/tamamlama işlemleriyle geçilebilir.',
+      );
+    }
     return this.prisma.task.update({
       where: { id: taskId },
-      data: {
-        status,
-        assignedToId: assignedToId !== undefined ? assignedToId : undefined,
-      },
-      include: {
-        assignedTo: { select: { id: true, fullName: true, avatarUrl: true } },
-      },
+      data: { status },
+      include: TASK_INCLUDE,
     });
   }
 
-  async updateTask(taskId: string, data: any) {
+  async updateTask(taskId: string, data: any, actorId: string) {
+    const existing = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!existing) throw new NotFoundException('Görev bulunamadı.');
+
+    const assignmentChanged =
+      data.assignedToId !== undefined && data.assignedToId !== existing.assignedToId;
+
     return this.prisma.task.update({
       where: { id: taskId },
       data: {
@@ -67,11 +83,10 @@ export class TasksService {
         description: data.description,
         priority: data.priority,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
-        assignedToId: data.assignedToId || undefined,
+        assignedToId: data.assignedToId !== undefined ? data.assignedToId || null : undefined,
+        assignedById: assignmentChanged ? (data.assignedToId ? actorId : null) : undefined,
       },
-      include: {
-        assignedTo: { select: { id: true, fullName: true, avatarUrl: true } },
-      },
+      include: TASK_INCLUDE,
     });
   }
 
@@ -79,6 +94,195 @@ export class TasksService {
     return this.prisma.task.delete({
       where: { id: taskId },
     });
+  }
+
+  async completeTask(taskId: string, actorId: string) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: { assignedBy: true },
+    });
+    if (!task) throw new NotFoundException('Görev bulunamadı.');
+    if (task.assignedToId !== actorId) {
+      throw new ForbiddenException('Bu görevi sadece atanan kişi tamamlanmış olarak işaretleyebilir.');
+    }
+
+    const skipsPeerApproval =
+      !task.assignedBy || task.assignedBy.role === SystemRole.ADMIN || task.assignedById === actorId;
+    const nextStatus = skipsPeerApproval ? TaskStatus.REVIEW : TaskStatus.PENDING_APPROVAL;
+
+    const updated = await this.prisma.task.update({
+      where: { id: taskId },
+      data: { status: nextStatus },
+      include: TASK_INCLUDE,
+    });
+
+    if (skipsPeerApproval) {
+      this.notifyAdmins(updated, 'incelemenizi bekliyor').catch((err) =>
+        console.error('Görev inceleme bildirimi gönderilirken hata oluştu:', err),
+      );
+    } else if (task.assignedById) {
+      this.notificationsService
+        .create(task.assignedById, {
+          actorId,
+          type: NotificationType.TASK_APPROVAL_NEEDED,
+          title: `${updated.assignedTo?.fullName} bir görevi tamamladı, onayınızı bekliyor`,
+          body: updated.title,
+          entityType: 'project',
+          entityId: updated.projectId,
+        })
+        .catch((err) => console.error('Görev onay bildirimi gönderilirken hata oluştu:', err));
+    }
+
+    return updated;
+  }
+
+  async approveTask(taskId: string, actor: { id: string; role: string }) {
+    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('Görev bulunamadı.');
+
+    if (task.status === TaskStatus.PENDING_APPROVAL) {
+      if (task.assignedById !== actor.id) {
+        throw new ForbiddenException('Bu görevi sadece ataması yapan kişi onaylayabilir.');
+      }
+      const updated = await this.prisma.task.update({
+        where: { id: taskId },
+        data: { status: TaskStatus.REVIEW },
+        include: TASK_INCLUDE,
+      });
+      this.notifyAdmins(updated, 'incelemenizi bekliyor').catch((err) =>
+        console.error('Görev inceleme bildirimi gönderilirken hata oluştu:', err),
+      );
+      return updated;
+    }
+
+    if (task.status === TaskStatus.REVIEW) {
+      if (actor.role !== SystemRole.ADMIN) {
+        throw new ForbiddenException('Bu aşamadaki bir görevi sadece yöneticiler onaylayabilir.');
+      }
+      const updated = await this.prisma.task.update({
+        where: { id: taskId },
+        data: { status: TaskStatus.DONE },
+        include: TASK_INCLUDE,
+      });
+      if (updated.assignedToId) {
+        this.notificationsService
+          .create(updated.assignedToId, {
+            actorId: actor.id,
+            type: NotificationType.TASK_APPROVED,
+            title: 'Göreviniz onaylandı ve tamamlandı olarak işaretlendi',
+            body: updated.title,
+            entityType: 'project',
+            entityId: updated.projectId,
+          })
+          .catch((err) => console.error('Görev onay bildirimi gönderilirken hata oluştu:', err));
+      }
+      return updated;
+    }
+
+    throw new ForbiddenException('Bu görev şu an onay bekleyen bir aşamada değil.');
+  }
+
+  async rejectTask(taskId: string, actor: { id: string; role: string }) {
+    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('Görev bulunamadı.');
+
+    const isPeerApprover =
+      task.status === TaskStatus.PENDING_APPROVAL && task.assignedById === actor.id;
+    const isAdminReview = task.status === TaskStatus.REVIEW && actor.role === SystemRole.ADMIN;
+
+    if (!isPeerApprover && !isAdminReview) {
+      throw new ForbiddenException('Bu görevi reddetme yetkiniz yok.');
+    }
+
+    const updated = await this.prisma.task.update({
+      where: { id: taskId },
+      data: { status: TaskStatus.IN_PROGRESS },
+      include: TASK_INCLUDE,
+    });
+
+    if (updated.assignedToId) {
+      this.notificationsService
+        .create(updated.assignedToId, {
+          actorId: actor.id,
+          type: NotificationType.TASK_REJECTED,
+          title: 'Göreviniz reddedildi, tekrar gözden geçirmeniz gerekiyor',
+          body: updated.title,
+          entityType: 'project',
+          entityId: updated.projectId,
+        })
+        .catch((err) => console.error('Görev red bildirimi gönderilirken hata oluştu:', err));
+    }
+
+    return updated;
+  }
+
+  async delegateTask(taskId: string, actorId: string, toUserId: string) {
+    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('Görev bulunamadı.');
+    if (task.assignedToId !== actorId) {
+      throw new ForbiddenException('Bu görevi sadece atanan kişi başkasına devredebilir.');
+    }
+
+    const target = await this.prisma.user.findUnique({ where: { id: toUserId } });
+    if (!target) throw new NotFoundException('Devredilecek kullanıcı bulunamadı.');
+
+    if (target.role !== SystemRole.ADMIN) {
+      const hasAccess = await this.prisma.projectPermission.findUnique({
+        where: { userId_projectId: { userId: toUserId, projectId: task.projectId } },
+      });
+      if (!hasAccess) {
+        throw new ForbiddenException('Devredilecek kullanıcının bu projeye erişimi yok.');
+      }
+    }
+
+    const updated = await this.prisma.task.update({
+      where: { id: taskId },
+      data: {
+        assignedToId: toUserId,
+        assignedById: actorId,
+        status: TaskStatus.IN_PROGRESS,
+      },
+      include: TASK_INCLUDE,
+    });
+
+    this.notifyAssignment(updated, updated.assignedBy?.fullName).catch((err) =>
+      console.error('Görev devir bildirimi gönderilirken hata oluştu:', err),
+    );
+
+    return updated;
+  }
+
+  private async notifyAssignment(task: any, assignerName?: string) {
+    if (!task.assignedToId) return;
+    await this.notificationsService.create(task.assignedToId, {
+      actorId: task.assignedById,
+      type: NotificationType.TASK_ASSIGNED,
+      title: assignerName ? `${assignerName} size bir görev atadı` : 'Size bir görev atandı',
+      body: task.title,
+      entityType: 'project',
+      entityId: task.projectId,
+    });
+  }
+
+  private async notifyAdmins(task: any, suffix: string) {
+    const admins = await this.prisma.user.findMany({
+      where: { role: SystemRole.ADMIN },
+      select: { id: true },
+    });
+    await Promise.all(
+      admins
+        .filter((a) => a.id !== task.assignedToId)
+        .map((a) =>
+          this.notificationsService.create(a.id, {
+            actorId: task.assignedToId,
+            type: NotificationType.TASK_APPROVAL_NEEDED,
+            title: `Bir görev ${suffix}`,
+            body: task.title,
+            entityType: 'project',
+            entityId: task.projectId,
+          }),
+        ),
+    );
   }
 
   // GEMINI AI OTOMATİK KANBAN GÖREV OLUŞTURUCU
@@ -134,9 +338,7 @@ export class TasksService {
           assignedToId: aiUserId,
           createdById: creatorId,
         },
-        include: {
-          assignedTo: { select: { id: true, fullName: true, avatarUrl: true } },
-        },
+        include: TASK_INCLUDE,
       });
       createdTasks.push(task);
     }

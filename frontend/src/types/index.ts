@@ -78,11 +78,13 @@ export interface Task {
   projectId: string;
   title: string;
   description?: string;
-  status: 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE';
+  status: 'TODO' | 'IN_PROGRESS' | 'PENDING_APPROVAL' | 'REVIEW' | 'DONE';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   dueDate?: string;
   assignedToId?: string;
   assignedTo?: { id: string; fullName: string; avatarUrl?: string; email?: string };
+  assignedById?: string;
+  assignedBy?: { id: string; fullName: string; avatarUrl?: string; role?: string };
   createdById: string;
   createdAt: string;
   updatedAt?: string;

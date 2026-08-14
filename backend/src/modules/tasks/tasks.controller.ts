@@ -43,9 +43,9 @@ export class TasksController {
   @RequireProjectPermission(ProjectPermissionLevel.WRITE)
   async updateStatus(
     @Param('taskId') taskId: string,
-    @Body() body: { status: string; assignedToId?: string },
+    @Body() body: { status: string },
   ) {
-    return this.tasksService.updateTaskStatus(taskId, body.status, body.assignedToId);
+    return this.tasksService.updateTaskStatus(taskId, body.status);
   }
 
   @Patch(':taskId')
@@ -54,8 +54,41 @@ export class TasksController {
   async updateTask(
     @Param('taskId') taskId: string,
     @Body() body: any,
+    @Request() req: any,
   ) {
-    return this.tasksService.updateTask(taskId, body);
+    return this.tasksService.updateTask(taskId, body, req.user.id);
+  }
+
+  @Patch(':taskId/complete')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.WRITE)
+  async completeTask(@Param('taskId') taskId: string, @Request() req: any) {
+    return this.tasksService.completeTask(taskId, req.user.id);
+  }
+
+  @Patch(':taskId/approve')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.WRITE)
+  async approveTask(@Param('taskId') taskId: string, @Request() req: any) {
+    return this.tasksService.approveTask(taskId, { id: req.user.id, role: req.user.role });
+  }
+
+  @Patch(':taskId/reject')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.WRITE)
+  async rejectTask(@Param('taskId') taskId: string, @Request() req: any) {
+    return this.tasksService.rejectTask(taskId, { id: req.user.id, role: req.user.role });
+  }
+
+  @Patch(':taskId/delegate')
+  @UseGuards(ProjectAccessGuard)
+  @RequireProjectPermission(ProjectPermissionLevel.WRITE)
+  async delegateTask(
+    @Param('taskId') taskId: string,
+    @Body() body: { toUserId: string },
+    @Request() req: any,
+  ) {
+    return this.tasksService.delegateTask(taskId, req.user.id, body.toUserId);
   }
 
   @Delete(':taskId')
